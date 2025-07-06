@@ -2,6 +2,10 @@
 
 Minimal Z80 assembly implementation of ZVDB (Zero-Vector Database) for Scorpion ZS-256-Turbo+ clone.
 
+## But Why???
+
+   **[ZVDB-Z80-ABAP.md](ZVDB-Z80-ABAP.md)**
+
 ## Features
 
 - **1-bit quantization**: Each vector component is quantized to 1 bit (positive/negative)
