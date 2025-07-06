@@ -1,0 +1,34 @@
+.claude
+.claude/*
+CLAUDE.md
+
+# Build outputs
+build/
+dist/
+
+# Assembly listing files
+*.lst
+
+# Symbol files
+*.sym
+*.exp
+
+# Snapshot files (unless in build/)
+*.sna
+*.tap
+*.bin
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Editor specific
+*.swp
+*.swo
+.vscode/
+.idea/

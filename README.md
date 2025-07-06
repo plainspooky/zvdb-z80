@@ -71,7 +71,49 @@ Requires sjasmplus assembler:
 make
 ```
 
-This creates `zvdb_test.sna` snapshot file for Scorpion emulator.
+This creates snapshot files in the `build/` directory for Scorpion emulator.
+
+**Note**: There are currently some duplicate label issues with the assembly files. Pre-built binaries are available in the `build/` directory:
+- `zvdb_test.tap` - TAP file for loading in ZX Spectrum emulators
+- `test_runner.bin` - Binary test runner
+- `zvdb_code.bin` - Core ZVDB implementation binary
+
+## Running the Code
+
+### Option 1: Using a ZX Spectrum Emulator
+
+1. **Install an emulator** (choose one):
+   - [Fuse](http://fuse-emulator.sourceforge.net/) - Cross-platform, accurate emulation
+   - [ZEsarUX](https://github.com/chernandezba/zesarux) - Multi-machine emulator with debugging
+   - [Speccy](https://fms.komkon.org/Speccy/) - Windows/Android emulator
+   - [Retro Virtual Machine](http://www.retrovirtualmachine.org/) - macOS focused
+
+2. **Load the program**:
+   - Open your emulator
+   - Load `build/zvdb_test.tap` file (File → Open or drag and drop)
+   - The program will auto-run after loading
+
+3. **What you'll see**:
+   - "ZVDB-Z80 Test Program" header
+   - "Added 3 test vectors" - confirms vector addition
+   - "Database reindexed" - hash index rebuilt
+   - "Nearest vector: #XX Score: #XXXX" - search result
+   - "Test complete" - program finished
+
+### Option 2: Using Online Emulators
+
+1. Visit [JSSpeccy](https://jsspeccy.zxdemo.org/) or [Qaop/JS](http://torinak.com/qaop/en)
+2. Upload the `build/zvdb_test.tap` file
+3. The program will run automatically
+
+### Option 3: Running on Real Hardware
+
+If you have a real ZX Spectrum or Scorpion:
+1. Transfer `build/zvdb_test.tap` to the machine via:
+   - Audio loading from WAV file
+   - DivIDE/DivMMC interface
+   - Other modern storage solutions
+2. LOAD "" and the program will execute
 
 ## Usage
 
@@ -80,6 +122,20 @@ The test program demonstrates:
 2. Adding test vectors
 3. Reindexing
 4. Searching for nearest vector
+
+### API Functions
+
+- `init_db` - Initialize database (clear vectors, reset count)
+- `add_vector` - Add vector at HL to database, returns index in A
+- `bf_search` - Search for vector at HL, returns index in A and score in BC
+- `calc_hash` - Calculate hash for vector at HL, returns hash in A
+- `reindex` - Rebuild hash index for all vectors
+
+### Memory Requirements
+
+- 8KB for vector storage (#8000-#9FFF)
+- 512 bytes for hash index (#A000-#A1FF)
+- 512 bytes for hyperplanes and lookup table (#A200-#A3FF)
 
 ## Future Enhancements
 
