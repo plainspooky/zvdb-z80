@@ -1,7 +1,8 @@
 # zvdb-z80
 
 Minimal Z80 assembly implementation of [ZVDB (ABAP Vector Database)](https://github.com/oisee/zvdb) for ZX Spectrum clone.
-(Want CP/M version?)
+
+(Want CP/M version? ^_^)
 
 ## But Why???
 
