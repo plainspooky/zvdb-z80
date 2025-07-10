@@ -1,14 +1,46 @@
 # zvdb-z80
 
-Minimal Z80 assembly implementation of [ZVDB (ABAP Vector Database)](https://github.com/oisee/zvdb) for ZX Spectrum clone.
+Minimal Z80 assembly implementation of [ZVDB (ABAP Vector Database)](https://github.com/oisee/zvdb) for multiple platforms including ZX Spectrum, CP/M systems, and even programmable calculators!
 
-(Want CP/M version? ^_^)
+✨ **NEW**: CP/M version, UI demos, and world's smallest vector database (36 calculator steps!) - see [CHANGELOG.md](CHANGELOG.md)
+
+## Quick Start
+
+```bash
+# Build everything
+make clean && make
+
+# Run on ZX Spectrum emulator
+fuse build/zvdb_ui.sna
+
+# Run on CP/M system
+cpm build/zvdb_cpm.com
+```
 
 ## But Why???
 
    **[ZVDB-Z80-ABAP.md](ZVDB-Z80-ABAP.md)**
 
-## Features
+## Available Versions
+
+### 🖥️ ZX Spectrum Versions
+- **Basic**: 256 vectors, standard 128K memory
+- **Paged**: 896 vectors, uses extended memory  
+- **Compact**: 7,168 vectors, optimized storage
+- **UI Demo**: Interactive graphical interface with plasma effects
+
+### 💾 CP/M Version (NEW!)
+- Works on Amstrad CPC, PCW, and other CP/M systems
+- ANSI terminal UI with vector visualization
+- Interactive selection and search
+- See [Issue #1](https://github.com/oisee/zvdb-z80/issues/1)
+
+### 🧮 Sinclair Cambridge Programmable (NEW!)
+- World's smallest vector database - just 36 steps!
+- Up to 9 vectors using calculator registers
+- See `zvdb_cambridge.txt`
+
+## Core Features
 
 - **1-bit quantization**: Each vector component is quantized to 1 bit (positive/negative)
 - **256-bit vectors**: Optimized for Scorpion's 256-bit architecture (32 bytes per vector)
@@ -71,13 +103,19 @@ Minimal Z80 assembly implementation of [ZVDB (ABAP Vector Database)](https://git
 
 ## Building
 
-Requires sjasmplus assembler:
+Requires [sjasmplus](https://github.com/z00m128/sjasmplus) assembler:
 
 ```bash
+make clean
 make
 ```
 
-This creates snapshot files in the `build/` directory for Scorpion emulator.
+This creates the following files in the `build/` directory:
+- `zvdb_test.sna` - Basic version test
+- `zvdb_paged_test.sna` - Paged memory version test
+- `zvdb_compact_test.sna` - Compact version test
+- `zvdb_ui.sna` - Interactive UI demo (NEW!)
+- `zvdb_cpm.com` - CP/M executable (NEW!)
 
 **Note**: There are currently some duplicate label issues with the assembly files. Pre-built binaries are available in the `build/` directory:
 - `zvdb_test.tap` - TAP file for loading in ZX Spectrum emulators
@@ -150,3 +188,34 @@ The test program demonstrates:
 - Vector deletion/update
 - Persistent storage
 - Larger vector support (512, 1024 bits)
+
+## Extreme Minimalism: Sinclair Cambridge Programmable
+
+The ultimate minimalist implementation - ZVDB in just 36 calculator steps:
+
+- **1 vector = 1 number** (8 bits packed as decimal 0-255)
+- **Maximum 9 vectors** (limited by calculator registers)
+- **Search = subtraction + find minimum**
+- **Complete program: 36 steps!**
+
+This is probably the world's smallest vector database implementation. See `zvdb_cambridge.txt` for the complete program.
+
+## Interactive Demos
+
+### 🎨 ZX Spectrum UI Demo (`zvdb_ui.sna`)
+- **Visual Interface**: Vectors displayed as 8x8 bit patterns
+- **Navigation**: Use cursor keys to browse, Enter to search
+- **Effects**: Animated plasma effect and smooth scrolling text
+- **Music Ready**: PT3 player stub included for ProTracker music
+- **Greetings**: Classic demoscene-style scrolling message
+
+### 🖥️ CP/M Terminal UI (`zvdb_cpm.com`)
+- **ANSI Graphics**: Works on any CP/M system with ANSI terminal
+- **ASCII Sprites**: Vectors shown as 8x8 ASCII art patterns
+- **Controls**: W/S or J/K to navigate, Enter to search, Q to quit
+- **Compatibility**: Tested for Amstrad CPC and PCW systems
+- **Memory Efficient**: Fits within CP/M TPA constraints
+
+## License
+
+MIT
