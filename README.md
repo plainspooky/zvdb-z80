@@ -40,6 +40,12 @@ cpm build/zvdb_cpm.com
 ### 🧮 Sinclair Cambridge Programmable (NEW!)
 - World's smallest vector database - just 36 steps!
 - Up to 9 vectors using calculator registers
+- See `zvdb_sinclair_cambridge.txt`
+
+### 🎛️ MK14 Microcomputer (NEW!)
+- SC/MP assembly implementation for Science of Cambridge MK14
+- 16 vectors using 256 bytes RAM
+- Hamming distance search with XOR
 - See `zvdb_cambridge.txt`
 
 ## Core Features
@@ -191,7 +197,9 @@ The test program demonstrates:
 - Persistent storage
 - Larger vector support (512, 1024 bits)
 
-## Extreme Minimalism: Sinclair Cambridge Programmable
+## Extreme Minimalism: Calculator & Microcomputer Implementations
+
+### Sinclair Cambridge Programmable Calculator
 
 The ultimate minimalist implementation - ZVDB in just 36 calculator steps:
 
@@ -200,7 +208,19 @@ The ultimate minimalist implementation - ZVDB in just 36 calculator steps:
 - **Search = subtraction + find minimum**
 - **Complete program: 36 steps!**
 
-This is probably the world's smallest vector database implementation. See `zvdb_cambridge.txt` for the complete program.
+This is probably the world's smallest vector database implementation. See `zvdb_sinclair_cambridge.txt` for the complete program.
+
+### MK14 Microcomputer
+
+A more sophisticated implementation for the Science of Cambridge MK14:
+
+- **SC/MP processor** (INS8060) assembly language
+- **16 vectors** stored in 256 bytes RAM
+- **Hamming distance** calculation using XOR
+- **Hex keypad** input via monitor ROM
+- **LED display** shows best match index
+
+See `zvdb_cambridge.txt` for the SC/MP assembly implementation.
 
 ## Interactive Demos
 

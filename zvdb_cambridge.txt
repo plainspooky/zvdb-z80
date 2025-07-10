@@ -1,105 +1,146 @@
-ZVDB for Sinclair Cambridge Programmable Calculator
-====================================================
+ZVDB for MK14 (SC/MP INS8060)
+==============================
 
-Vector Database Implementation in 36 Steps
-------------------------------------------
+Vector Database Implementation for Science of Cambridge MK14
+------------------------------------------------------------
 
 Concept:
-- Each vector = 1 decimal number (8 bits packed as decimal)
-- Maximum 9 vectors (registers 1-9)
-- Search = subtraction and find minimum
-- Register 0 = query vector
+- Each vector = 1 byte (8 bits)
+- Maximum 16 vectors stored in RAM
+- Search = XOR and count set bits (Hamming distance)
+- Uses MK14's 256 bytes RAM + 512 bytes ROM monitor
+
+Memory Map:
+-----------
+0F00-0F7F: MK14 Monitor ROM
+0B00-0BFF: User RAM (256 bytes)
+0880-08FF: Display/keyboard I/O
 
 Program Layout:
 ---------------
 
-Memory Usage:
-R0: Query vector (input)
-R1-R9: Database vectors (up to 9)
-M: Minimum distance found
-RCL: Current index being checked
+RAM Usage:
+0B00: Query vector (input)
+0B01-0B10: Database vectors (up to 16)
+0B20: Vector count
+0B21: Current minimum distance
+0B22: Best match index
+0B23: Loop counter
+0B24: Temp storage
 
-Step-by-step Program (36 steps):
----------------------------------
+SC/MP Assembly Program:
+-----------------------
 
-01: RCL 0      ; Load query vector
-02: -          ; Subtract
-03: RCL 1      ; First database vector
-04: =          ; Calculate difference
-05: x²         ; Square (absolute value)
-06: STO M      ; Store as initial minimum
-07: 1          ; Index = 1
-08: STO RCL    ; Store current best index
+        ORG     0B30H           ; Start after data area
 
-; Loop through remaining vectors (2-9)
-09: 2          ; Start from vector 2
-10: STO +      ; Store counter
-11: RCL 0      ; Query vector
-12: -          ; Subtract
-13: RCL IND    ; Indirect recall (current vector)
-14: =          ; Calculate difference
-15: x²         ; Square for absolute
-16: RCL M      ; Recall current minimum
-17: x≤y        ; Compare (new ≤ min?)
-18: GTO 26     ; If not smaller, skip update
+; Initialize
+START:  LDI     0FFH            ; Max distance
+        ST      0B21H           ; Store as initial minimum
+        LDI     00H             
+        ST      0B22H           ; Clear best index
+        
+; Main search loop
+        LDI     01H             ; Start with vector 1
+        ST      0B23H           ; Store as counter
 
+LOOP:   LD      0B23H           ; Get current index
+        XPAL    P1              ; Use as pointer low byte
+        LDI     0BH             
+        XPAH    P1              ; P1 points to current vector
+        
+        LD      @1(P1)          ; Load vector[i]
+        ST      0B24H           ; Save temporarily
+        
+        LD      0B00H           ; Load query vector
+        XOR     0B24H           ; XOR with database vector
+        
+; Count set bits (Hamming distance)
+        ST      0B24H           ; Store XOR result
+        LDI     00H             ; Clear bit counter
+        XPAL    P2              ; Use P2 as bit counter
+        
+BITCNT: LD      0B24H           ; Get XOR result
+        ANI     01H             ; Check LSB
+        JZ      SKIP            ; Skip if 0
+        LD      @-1(P2)         ; Increment counter
+        XPAL    P2
+        
+SKIP:   LD      0B24H           ; Get XOR result
+        SR                      ; Shift right
+        ST      0B24H           ; Store back
+        JNZ     BITCNT          ; Continue if not zero
+        
+; Compare with minimum
+        XPAL    P2              ; Get bit count
+        ST      0B24H           ; Store distance
+        LD      0B21H           ; Load current minimum
+        CCL
+        CAD     0B24H           ; Compare (subtract)
+        JP      NEXT            ; Jump if new >= min
+        
 ; Update minimum
-19: x⟷y        ; Swap to get new minimum
-20: STO M      ; Store new minimum
-21: RCL +      ; Get current index
-22: STO RCL    ; Store as best index
-23: GTO 26     ; Continue
-
-; Increment and check loop
-26: RCL +      ; Get counter
-27: 1          ; 
-28: +          ; Increment
-29: STO +      ; Store back
-30: 9          ; Maximum index
-31: -          ; 
-32: x>0        ; More vectors?
-33: GTO 11     ; Yes, continue loop
+        LD      0B24H           ; Get new minimum
+        ST      0B21H           ; Store as minimum
+        LD      0B23H           ; Get current index
+        ST      0B22H           ; Store as best index
+        
+NEXT:   LD      0B23H           ; Get counter
+        CCL
+        DAI     01H             ; Increment
+        ST      0B23H           ; Store back
+        CCL
+        CAI     10H             ; Compare with 16
+        JNZ     LOOP            ; Continue if < 16
 
 ; Display result
-34: RCL RCL    ; Best match index
-35: STOP       ; Show result
-36: GTO 01     ; Restart for new query
+        LD      0B22H           ; Load best match index
+        ANI     0FH             ; Mask to single digit
+        ORI     30H             ; Convert to ASCII
+        CAS                     ; Output to display
+        HALT                    ; Stop
+
+; Data entry routine (called from monitor)
+STORE:  XAE                     ; Get accumulator (vector value)
+        ST      @1(P1)          ; Store at pointer location
+        RTN                     ; Return to monitor
 
 Usage Instructions:
 -------------------
 
 1. Loading vectors:
-   - Enter vector value, press STO n (n=1-9)
-   - Each vector is 8-bit value packed as decimal (0-255)
+   - Use MK14 monitor to enter vector values at 0B01-0B10
+   - Each vector is an 8-bit value (00-FF hex)
+   - Example: To store AA at location 0B01:
+     Press: 0B01 AA [GO]
 
 2. Searching:
-   - Enter query value
-   - Press STO 0
-   - Press R/S (Run/Stop)
-   - Calculator displays index of closest match
+   - Store query vector at 0B00
+   - Execute program from 0B30
+   - MK14 displays index (0-F) of closest match
 
 3. Example:
    Database vectors:
-   R1 = 170 (10101010 binary)
-   R2 = 85  (01010101 binary)
-   R3 = 240 (11110000 binary)
-   R4 = 15  (00001111 binary)
+   0B01 = AA (10101010 binary)
+   0B02 = 55 (01010101 binary)  
+   0B03 = F0 (11110000 binary)
+   0B04 = 0F (00001111 binary)
    
-   Query: 160 (10100000 binary)
-   Result: 1 (closest to R1)
+   Query: A0 (10100000 binary)
+   Result: 1 (closest to vector at 0B01)
 
-Optimizations:
---------------
-- Using x² instead of ABS for absolute value
-- Indirect addressing via RCL IND
-- Single pass through all vectors
-- Minimal register usage
+Technical Notes:
+----------------
+- Uses SC/MP's XOR instruction for Hamming distance
+- Bit counting done by shift and test
+- Display output via CAS (Copy Accumulator to Serial)
+- Program fits in ~80 bytes of RAM
+- Can be extended to use cassette for vector storage
 
-Notes:
-------
-- This is probably the world's smallest vector database!
-- Limited to 9 vectors due to calculator registers
-- Distance metric is simple difference (L1 norm)
-- Could modify for Hamming distance with BCD tricks
+MK14 Specific Features:
+-----------------------
+- Hex keypad input via monitor ROM routines
+- 8-digit 7-segment LED display
+- Optional RAM expansion for more vectors
+- Can interface with cassette for persistent storage
 
-Total: EXACTLY 36 steps!
+Total: ~40 SC/MP instructions
