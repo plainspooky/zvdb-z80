@@ -21,7 +21,7 @@ cpm build/zvdb_cpm.com
 
    **[ZVDB-Z80-ABAP.md](ZVDB-Z80-ABAP.md)**
    
-   📰 **Press Coverage**: [The Register - "From mainframes to 8-bit microcomputers: Porting an ABAP database to the ZX Spectrum"](https://www.theregister.com/2025/07/08/sap_abap_db_spectrum_port/)
+   📰 **As Featured In**: This project was covered by [The Register](https://www.theregister.com/2025/07/08/sap_abap_db_spectrum_port/) and discussed on [Hacker News](https://news.ycombinator.com/item?id=44487110)
 
 ## Available Versions
 
