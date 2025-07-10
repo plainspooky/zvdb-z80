@@ -3,6 +3,7 @@
 ; For ZX Spectrum 128K
 
         DEVICE ZXSPECTRUM128
+        OUTPUT "zvdb_ui.sna"
 
 ; Memory layout
         ORG     #8000
