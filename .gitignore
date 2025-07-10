@@ -7,7 +7,7 @@ CLAUDE.md
 dist/
 
 # Assembly listing files
-*.lst
+/*.lst
 
 # Symbol files
 *.sym
