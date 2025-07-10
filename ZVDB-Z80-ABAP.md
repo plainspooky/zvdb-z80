@@ -56,7 +56,7 @@ When I ported ZVDB to actual Z80 assembly, I barely had to change anything. Beca
 ; This isn't a port - it's a homecoming
 compare_vectors:
     LD B, 192       ; Process 192 bytes
-    XOR A           ; Accumulator = 0
+    LD C, 0         ; Popcount Accumulator = 0
     
 next_byte:
     LD A, (DE)      ; Vector B
