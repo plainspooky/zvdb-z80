@@ -3,7 +3,7 @@
 CLAUDE.md
 
 # Build outputs
-build/
+# build/  # Commented out to include build directory in repository
 dist/
 
 # Assembly listing files
@@ -14,9 +14,9 @@ dist/
 *.exp
 
 # Snapshot files (unless in build/)
-*.sna
-*.tap
-*.bin
+/*.sna
+/*.tap
+/*.bin
 
 # Temporary files
 *.tmp
