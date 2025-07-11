@@ -4,7 +4,7 @@ ASM = sjasmplus
 ASMFLAGS = 
 BUILDDIR = build
 
-all: $(BUILDDIR)/zvdb_test.sna $(BUILDDIR)/zvdb_paged_test.sna $(BUILDDIR)/zvdb_compact_test.sna $(BUILDDIR)/zvdb_ui.sna $(BUILDDIR)/zvdb_cpm.com
+all: $(BUILDDIR)/zvdb_test.sna $(BUILDDIR)/zvdb_paged_test.sna $(BUILDDIR)/zvdb_compact_test.sna $(BUILDDIR)/zvdb_ui.sna $(BUILDDIR)/zvdb_cpm.com $(BUILDDIR)/zvdb_msx.com
 
 $(BUILDDIR):
 	mkdir -p $(BUILDDIR)
@@ -27,6 +27,9 @@ $(BUILDDIR)/zvdb_ui.sna: zvdb_ui.asm | $(BUILDDIR)
 
 $(BUILDDIR)/zvdb_cpm.com: zvdb_cpm.asm | $(BUILDDIR)
 	$(ASM) $(ASMFLAGS) --lst=$(BUILDDIR)/zvdb_cpm.lst --raw=$(BUILDDIR)/zvdb_cpm.com zvdb_cpm.asm
+
+$(BUILDDIR)/zvdb_msx.com: zvdb_msx.asm | $(BUILDDIR)
+	$(ASM) $(ASMFLAGS) --lst=$(BUILDDIR)/zvdb_msx.lst --raw=$(BUILDDIR)/zvdb_msx.com zvdb_msx.asm
 
 clean:
 	rm -rf $(BUILDDIR)
