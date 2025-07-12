@@ -32,7 +32,17 @@ MAX_VECTORS     EQU     128     ; Maximum vectors (reduced for CP/M)
 HASH_BITS       EQU     7       ; Bits for hash (128 buckets)
 HYPERPLANES     EQU     8       ; Number of hyperplanes for hashing
 
+; MSX system calls
+CALSLT          EQU     #001C
+CLS             EQU     #00C3
+INITXT          EQU     #006C
+CHGET           EQU     #009F
+CHGCLR          EQU     #0062
+CHPUT           EQU     #00A2
+
 ; MSX system variables
+LINL40          EQU     #F3AE
+EXPTBL          EQU     #FCC1
 
         ORG     TPA
 
@@ -55,8 +65,6 @@ skip:
 welcome_msg:
         DEFM    "ZVDB-Z80 MSX2 Edition$"
 
-LINL40          EQU #F3AE
-
 ; Check if MSX is 80 column text mode
 check_80_columns:
         LD      A,(LINL40)
@@ -69,6 +77,17 @@ check_80_columns:
 
 .width_80_msg:
         DEFM    "Change screen width to 80 columns!",13,10,"$"
+
+; Call interslot routines
+call_slot:
+        LD      IY,(EXPTBL-1)
+        JP      CALSLT
+
+; Character Print
+print_char:
+        LD      IX,CHPUT
+        CALL    call_slot
+        RET        
 
 ; Initialize database
 init_db:
@@ -151,9 +170,9 @@ demo_ui:
         JR      Z,.ui_loop   ; No key pressed
         
         ; Handle key
-        CP      'q'
+        CP      "q"
         RET     Z               ; Quit
-        CP      'Q'
+        CP      "Q"
         RET     Z
        
         CP      31              ; Down
@@ -164,7 +183,7 @@ demo_ui:
 
         CP      13              ; Enter
         JR      Z,.do_search
-        CP      ' '
+        CP      32              ; Space
         JR      Z,.do_search
         
         JR      .ui_loop
@@ -251,11 +270,11 @@ display_vectors:
         LD      A,(current_display)
         CALL    print_hex_byte
         
-        LD      E,':'
-        LD      C,C_WRITE
-        CALL    BDOS
-        LD      E,' '
-        CALL    BDOS
+        LD      A,":"
+        CALL    print_char 
+
+        LD      A," "
+        CALL    print_char
         
         ; Display first 8 bytes as 8x8 sprite
         CALL    display_sprite
@@ -312,40 +331,29 @@ display_sprite:
         LD      B,8
 .bit_loop:
         RLA
+        PUSH    AF
+        
         JR      C,.set_bit
-        LD      E,' '
+        LD      A," "
         JR      .show_bit
 .set_bit:
-        PUSH    AF
-        PUSH    BC
-
         LD      A,(current_display)
-        LD      B,A
+        LD      C,A
         LD      A,(selected_vector)
-        CP      B
+        CP      C
         JR      NZ,.unselected_bit
-        LD      E,#DB           ; "█"
-        JR      .set_skip
-
+        LD      A,#DB           ; "█"
+        JR      .show_bit
 .unselected_bit:
-        LD      E,#CC           ; "🮘"
-
-.set_skip:
-        POP BC
-        POP AF
+        LD      A,#CC           ; "🮘"
 
 .show_bit:
-        PUSH    AF
-        PUSH    BC
-        LD      C,C_WRITE
-        CALL    BDOS
-        POP     BC
+        CALL    print_char
         POP     AF
         DJNZ    .bit_loop
         
-        LD      E," "
-        LD      C,C_WRITE
-        CALL    BDOS
+        LD      A," "
+        CALL    print_char
         
         POP     HL
         POP     BC
@@ -390,9 +398,7 @@ update_scroller:
         PUSH HL
 
         LD      A,(HL)
-        LD      E,A
-        LD      C,C_WRITE        
-        CALL    BDOS
+        CALL    print_char
 
         POP     HL
         POP     BC
@@ -478,14 +484,15 @@ print_hex_byte:
 print_hex_digit:
         CP      10
         JR      C,.digit
-        ADD     A,'A'-10
+        ADD     A,"A"-10
         JR      .print
 .digit:
-        ADD     A,'0'
+        ADD     A,"0"
 .print:
-        LD      E,A
-        LD      C,C_WRITE
-        CALL    BDOS
+        ;LD      E,A
+        ;LD      C,C_WRITE
+        ;CALL    BDOS
+        call    print_char
         RET
 
 ; Print hex word in HL
