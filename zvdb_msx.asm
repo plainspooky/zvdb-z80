@@ -52,8 +52,7 @@ start:
 skip:
         ; Print welcome message
         LD      DE,welcome_msg
-        LD      C,C_PRINT
-        CALL    BDOS
+        CALL    print_str
         
         CALL    init_db         ; Initialize database
         CALL    demo_ui         ; Run demo with UI
@@ -63,7 +62,7 @@ skip:
         JP      BDOS            ; Warm boot (safer)
 
 welcome_msg:
-        DEFM    "ZVDB-Z80 MSX2 Edition$"
+        DEFM    "ZVDB-Z80 MSX Edition",0
 
 ; Check if MSX is 80 column text mode
 check_80_columns:
@@ -72,22 +71,30 @@ check_80_columns:
         RET     Z
         
         LD      DE,.width_80_msg
-        LD      C,C_PRINT
-        CALL    BDOS
+        CALL    print_str
 
 .width_80_msg:
-        DEFM    "Change screen width to 80 columns!",13,10,"$"
+        DEFM    "Change screen width to 80 columns!",13,10,0
 
-; Call interslot routines
+; Call ROM routines
 call_slot:
-        LD      IY,(EXPTBL-1)
+        LD      IY,(EXPTBL-1)   ; Where the ROM lives :)
         JP      CALSLT
 
-; Character Print
+; Print character
 print_char:
         LD      IX,CHPUT
         CALL    call_slot
         RET        
+
+; Print string
+print_str:
+        LD      A,(DE)
+        CP      0
+        RET     Z
+        CALL    print_char
+        INC     DE
+        jr print_str
 
 ; Initialize database
 init_db:
@@ -219,19 +226,14 @@ demo_ui:
 
 ; Clear screen (ANSI escape sequence)
 clear_screen:
-        LD      DE,cls_seq
-        LD      C,C_PRINT
-        CALL    BDOS
+        LD      A,12
+        CALL    print_char
         RET
-
-cls_seq:
-        DEFM    27,"E$"
 
 ; Draw UI frame
 draw_ui_frame:
         LD      DE,ui_title
-        LD      C,C_PRINT
-        CALL    BDOS
+        CALL    print_str
         RET
 
 ui_title:
@@ -239,24 +241,23 @@ ui_title:
         DEFM    27,"E"              ; Clear Screen
 
         DEFM    1,"X"               ; "┌"
-    .36 DEFM    1,"W"               ; "─"
+    .35 DEFM    1,"W"               ; "─"
         DEFM    1,"Y",13,10         ; "┐"
 
         DEFM    1,"V"               ; "│"
-        DEFM    " ZVDB-Z80 Vector Database Demo MSX2 "
+        DEFM    " ZVDB-Z80 Vector Database Demo MSX "
         DEFM    1,"V",13,10         ; "│"
 
         DEFM    1,"Z"               ; "└"
-    .36 DEFM    1,"W"               ; "─"
+    .35 DEFM    1,"W"               ; "─"
         DEFM    1,"[",13,10         ; "┘"
 
-        DEFM    "Use arrows keys to select, <Enter> to search and <Q> to quit",13,10,"$"
+        DEFM    "Use arrows keys to select, <Enter> to search and <Q> to quit",13,10,0
 
 ; Display vectors with 8x8 sprite representation
 display_vectors:
         LD      DE,vector_list_pos
-        LD      C,C_PRINT
-        CALL    BDOS
+        CALL    print_str
         
         LD      A,(vector_count)
         LD      B,A
@@ -287,8 +288,7 @@ display_vectors:
 
         ; New line
         LD      DE,crlf
-        LD      C,C_PRINT
-        CALL    BDOS
+        CALL    print_str
         
         LD      A,(current_display)
         INC     A
@@ -300,10 +300,10 @@ display_vectors:
         RET
 
 vector_list_pos:
-        DEFM    27,"Y",32+5,32,"$"
+        DEFM    27,"Y",32+5,32,0
 
 crlf:
-        DEFM    13,10,"$"
+        DEFM    13,10,0
 
 ; Display 8x8 sprite from vector data
 display_sprite:
@@ -311,11 +311,7 @@ display_sprite:
         LD      A,(current_display)
         LD      L,A
         LD      H,0
-        ADD     HL,HL           ; x2
-        ADD     HL,HL           ; x4
-        ADD     HL,HL           ; x8
-        ADD     HL,HL           ; x16
-        ADD     HL,HL           ; x32
+    .5  ADD     HL,HL           ; x32
         LD      DE,vectors_db
         ADD     HL,DE
         
@@ -372,8 +368,7 @@ draw_plasma:
 ; Update scrolling text
 update_scroller:
         LD      DE,scroller_pos
-        LD      C,C_PRINT
-        CALL    BDOS
+        CALL    print_str
 
         LD      A,(scroll_text)
         LD      C,A
@@ -409,12 +404,12 @@ update_scroller:
         RET
 
 scroller_pos:
-        DEFM    27,"Y",32+22,32+40,"$"  ; Bottom line
+        DEFM    27,"Y",32+22,32+40,0  ; Bottom line
 
 scroll_text:
-        DEFM    "*** ZVDB-Z80 MSX2 EDITION *** GREETINGS TO ALL DEMOSCENERS! "
-        DEFM    "SPECIAL THANKS TO SIRIL/RD AND OISEE/4D FOR THE MUSIC... "
-        DEFM    "THIS IS A VECTOR DATABASE DEMO RUNNING ON YOUR MSX!"
+        DEFM    "*** ZVDB-Z80 MSX EDITION *** GREETINGS TO ALL DEMOSCENERS!"
+        DEFM    " SPECIAL THANKS TO SIRIL/RD AND OISEE/4D FOR THE MUSIC... "
+        DEFM    " THIS IS A VECTOR DATABASE DEMO RUNNING ON YOUR MSX!"
         DEFM    "                   "
 scroll_text_end:
         
@@ -425,11 +420,7 @@ perform_search:
         LD      A,(selected_vector)
         LD      L,A
         LD      H,0
-        ADD     HL,HL           ; x32
-        ADD     HL,HL
-        ADD     HL,HL
-        ADD     HL,HL
-        ADD     HL,HL
+    .5  ADD     HL,HL           ; x32
         LD      DE,vectors_db
         ADD     HL,DE
         LD      DE,query_vector
@@ -443,37 +434,31 @@ perform_search:
 ; Display search results
 display_results:
         LD      DE,results_msg
-        LD      C,C_PRINT
-        CALL    BDOS
+        CALL    print_str
         
         LD      A,(best_index)
         CALL    print_hex_byte
         
         LD      DE,score_msg
-        LD      C,C_PRINT
-        CALL    BDOS
+        CALL    print_str
         
         LD      HL,(best_score)
         CALL    print_hex_word
         
         LD      DE,crlf
-        LD      C,C_PRINT
-        CALL    BDOS
+        CALL    print_str
         RET
 
 results_msg:
-        DEFM    27,"Y",32+22," Best match: Vector $"
+        DEFM    27,"Y",32+22," Best match: Vector ",0
 
 score_msg:
-        DEFM    " Score: $"
+        DEFM    " Score: ",0
 
 ; Print hex byte in A
 print_hex_byte:
         PUSH    AF
-        RRA
-        RRA
-        RRA
-        RRA
+    .4  RRA
         AND     #0F
         CALL    print_hex_digit
         POP     AF
@@ -489,9 +474,6 @@ print_hex_digit:
 .digit:
         ADD     A,"0"
 .print:
-        ;LD      E,A
-        ;LD      C,C_WRITE
-        ;CALL    BDOS
         call    print_char
         RET
 
@@ -527,11 +509,7 @@ bf_search:
         LD      A,(current_index)
         LD      L,A
         LD      H,0
-        ADD     HL,HL           ; x32
-        ADD     HL,HL
-        ADD     HL,HL
-        ADD     HL,HL
-        ADD     HL,HL
+    .5  ADD     HL,HL           ; x32
         LD      DE,vectors_db
         ADD     HL,DE
         
