@@ -4,6 +4,22 @@ Minimal Z80 assembly implementation of [ZVDB (ABAP Vector Database)](https://git
 
 (Want CP/M version? ^_^)
 
+## 🔗 Related Implementations
+
+- **[ZVDB-MinZ](https://github.com/oisee/zvdb-minz)** - High-level implementation in MinZ language with:
+  - Type-safe vector operations
+  - Popcount LUT optimization (3.3x speedup)
+  - Comprehensive test suite
+  - Same algorithms, 10x faster to develop!
+  
+- **[MinZ Language](https://github.com/oisee/minz)** - Modern systems programming for Z80:
+  - Zero-cost lambdas with true SMC optimization
+  - Zero-cost interfaces and metaprogramming
+  - Ruby-style developer happiness (fn/fun, global keyword)
+  - Self-modifying code that beats hand-written assembly
+  - Lua metaprogramming at compile time
+  - Compiles to efficient Z80 assembly
+
 ## But Why???
 
    **[ZVDB-Z80-ABAP.md](ZVDB-Z80-ABAP.md)**
