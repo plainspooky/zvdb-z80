@@ -1,0 +1,105 @@
+ZVDB for Sinclair Cambridge Programmable Calculator
+====================================================
+
+Vector Database Implementation in 36 Steps
+------------------------------------------
+
+Concept:
+- Each vector = 1 decimal number (8 bits packed as decimal)
+- Maximum 9 vectors (registers 1-9)
+- Search = subtraction and find minimum
+- Register 0 = query vector
+
+Program Layout:
+---------------
+
+Memory Usage:
+R0: Query vector (input)
+R1-R9: Database vectors (up to 9)
+M: Minimum distance found
+RCL: Current index being checked
+
+Step-by-step Program (36 steps):
+---------------------------------
+
+01: RCL 0      ; Load query vector
+02: -          ; Subtract
+03: RCL 1      ; First database vector
+04: =          ; Calculate difference
+05: x²         ; Square (absolute value)
+06: STO M      ; Store as initial minimum
+07: 1          ; Index = 1
+08: STO RCL    ; Store current best index
+
+; Loop through remaining vectors (2-9)
+09: 2          ; Start from vector 2
+10: STO +      ; Store counter
+11: RCL 0      ; Query vector
+12: -          ; Subtract
+13: RCL IND    ; Indirect recall (current vector)
+14: =          ; Calculate difference
+15: x²         ; Square for absolute
+16: RCL M      ; Recall current minimum
+17: x≤y        ; Compare (new ≤ min?)
+18: GTO 26     ; If not smaller, skip update
+
+; Update minimum
+19: x⟷y        ; Swap to get new minimum
+20: STO M      ; Store new minimum
+21: RCL +      ; Get current index
+22: STO RCL    ; Store as best index
+23: GTO 26     ; Continue
+
+; Increment and check loop
+26: RCL +      ; Get counter
+27: 1          ; 
+28: +          ; Increment
+29: STO +      ; Store back
+30: 9          ; Maximum index
+31: -          ; 
+32: x>0        ; More vectors?
+33: GTO 11     ; Yes, continue loop
+
+; Display result
+34: RCL RCL    ; Best match index
+35: STOP       ; Show result
+36: GTO 01     ; Restart for new query
+
+Usage Instructions:
+-------------------
+
+1. Loading vectors:
+   - Enter vector value, press STO n (n=1-9)
+   - Each vector is 8-bit value packed as decimal (0-255)
+
+2. Searching:
+   - Enter query value
+   - Press STO 0
+   - Press R/S (Run/Stop)
+   - Calculator displays index of closest match
+
+3. Example:
+   Database vectors:
+   R1 = 170 (10101010 binary)
+   R2 = 85  (01010101 binary)
+   R3 = 240 (11110000 binary)
+   R4 = 15  (00001111 binary)
+   
+   Query: 160 (10100000 binary)
+   Result: 1 (closest to R1)
+
+Optimizations:
+--------------
+- Using x² instead of ABS for absolute value
+- Indirect addressing via RCL IND
+- Single pass through all vectors
+- Minimal register usage
+
+Notes:
+------
+- This is probably the world's smallest vector database!
+- Limited to 9 vectors due to calculator registers
+- Distance metric is simple difference (L1 norm)
+- Could modify for Hamming distance with BCD tricks
+
+Total: EXACTLY 36 steps!

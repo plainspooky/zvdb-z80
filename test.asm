@@ -1,6 +1,7 @@
 ; Test/demo program for zvdb-z80
 
         DEVICE ZXSPECTRUM128
+        OUTPUT "zvdb_test.sna"
         
         ORG     #6000
 

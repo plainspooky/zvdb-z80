@@ -1,6 +1,7 @@
 ; Test program for paged memory zvdb-z80
 
         DEVICE ZXSPECTRUM128
+        OUTPUT "zvdb_paged_test.sna"
         
         ORG     #6000
 
@@ -185,7 +186,6 @@ msg_no_hash:    DEFB    "No hash match found",13,0
 msg_done:       DEFB    13,"Test complete",13,0
 
 ; Include main zvdb code
-vector_count    EQU     #8000 + 1024 + 256 + 64
         INCLUDE "zvdb_paged.asm"
 
         SAVESNA "zvdb_paged_test.sna",start

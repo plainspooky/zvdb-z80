@@ -1,0 +1,45 @@
+ZVDB-Z80 Build Information
+==========================
+
+The project now includes the following targets:
+
+1. Original Versions:
+   - zvdb_test.sna - Basic vector database test
+   - zvdb_paged_test.sna - Paged memory version test
+   - zvdb_compact_test.sna - Compact version test
+
+2. New UI Versions:
+   - zvdb_ui.sna - ZX Spectrum version with:
+     * Vector selection UI with 8x8 sprite preview
+     * Keyboard navigation (cursor keys + Enter)
+     * Plasma effect at bottom
+     * Scrolling greetings text
+     * Search functionality
+
+   - zvdb_cpm.com - CP/M version for Amstrad CPC with:
+     * ANSI terminal UI
+     * Vector selection with ASCII art sprites
+     * Keyboard navigation (W/S or J/K + Enter)
+     * Scrolling text
+     * Search functionality
+     * Compatible with CP/M 2.2+
+
+Features implemented:
+- Vector display as 8x8 bit patterns (first 8 bytes of each vector)
+- Interactive selection with highlighting
+- Real-time search for nearest neighbors
+- Demo vectors with patterns for testing
+- Placeholder for PT3 music player integration
+
+To build (requires sjasmplus assembler):
+  make clean
+  make
+
+To run:
+- ZX Spectrum: Load zvdb_ui.sna in emulator
+- Amstrad CPC: Run zvdb_cpm.com under CP/M
+
+Music integration:
+- PT3 player stub provided (pt3player_stub.asm)
+- Ready for integration with real PT3 player
+- Music file: "216 cycles of moon" by oisee (2000)

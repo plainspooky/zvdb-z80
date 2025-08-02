@@ -1,6 +1,7 @@
 ; Test program for compact zvdb-z80 with << 5 addressing
 
         DEVICE ZXSPECTRUM128
+        OUTPUT "zvdb_compact_test.sna"
         
         ORG     #6000
 

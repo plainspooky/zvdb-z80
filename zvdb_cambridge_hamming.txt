@@ -1,0 +1,96 @@
+ZVDB Cambridge - Hamming Distance Version
+=========================================
+
+Alternative implementation using BCD for bit operations
+------------------------------------------------------
+
+Concept:
+- Pack 8 bits into 2-digit BCD (00-99)
+- Use digit manipulation for Hamming distance
+- Even more exotic!
+
+Program (36 steps):
+-------------------
+
+; Input format: 2-digit BCD where each digit represents 4 bits
+; Example: 15 = 0001 0101 binary
+
+01: RCL 0      ; Query vector (2-digit BCD)
+02: STO +      ; Save for digit extraction
+03: INT       ; Get tens digit (high nibble)
+04: 10         ;
+05: ×          ;
+06: STO -      ; Save high nibble × 10
+07: RCL +      ; Get original
+08: RCL -      ; 
+09: -          ; Get ones digit (low nibble)
+10: STO M      ; Store low nibble
+
+; Process first vector
+11: 1          ;
+12: STO RCL    ; Best index = 1
+13: RCL 1      ; First vector
+14: CALL 30    ; Hamming distance subroutine
+15: STO N      ; Store as minimum
+
+; Loop vectors 2-9
+16: 2          ;
+17: STO +      ; Counter
+18: RCL IND    ; Get vector
+19: CALL 30    ; Hamming distance
+20: RCL N      ; Current minimum
+21: x≤y        ; New distance smaller?
+22: GTO 28     ; No, skip
+23: x⟷y        ;
+24: STO N      ; Update minimum
+25: RCL +      ;
+26: STO RCL    ; Update best index
+27: GTO 28     ;
+28: RCL +      ; Counter
+29: 1          ;
+30: +          ;
+31: STO +      ;
+32: 9          ;
+33: x≥y        ; Done?
+34: GTO 18     ; No, continue
+35: RCL RCL    ; Best match
+36: STOP       ; Display
+
+; Subroutine: Hamming distance (at step 30)
+; This would need clever BCD manipulation
+; Real implementation would require more steps
+
+Advanced Version with Bit Counting:
+-----------------------------------
+
+For true Hamming distance, we'd need to:
+1. XOR the two values
+2. Count set bits
+
+Since Cambridge Programmable lacks XOR, we'd simulate:
+- Compare each decimal digit
+- Use lookup technique with conditional jumps
+- Would exceed 36 steps for full implementation
+
+Practical Simplification:
+-------------------------
+
+; Ultra-simple version using direct difference
+01: 0 STO RCL  ; Clear best index
+02: 9 STO M    ; Max distance
+03: 1 STO +    ; Counter = 1
+04: RCL 0      ; Query
+05: - RCL IND  ; Subtract vector[counter]
+06: = ABS      ; Absolute difference  
+07: RCL M x≤y  ; Smaller than min?
+08: GTO 13     ; No, skip
+09: STO M      ; New minimum
+10: RCL +      ; Current index
+11: STO RCL    ; Save best
+12: GTO 13     ;
+13: RCL + 1 +  ; Increment counter
+14: STO + 9 -  ; Check if done
+15: x>0 GTO 04 ; Continue if not done
+16: RCL RCL    ; Display result
+
+This shows the extreme constraints of early programmable calculators!

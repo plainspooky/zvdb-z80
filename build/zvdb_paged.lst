@@ -1,0 +1,830 @@
+# file opened: test_paged.asm
+  1   0000              ; Test program for paged memory zvdb-z80
+  2   0000
+  3   0000                      DEVICE ZXSPECTRUM128
+  4   0000
+  5   0000                      ORG     #6000
+  6   6000
+  7   6000              start:
+  8   6000 F3                   DI
+  9   6001 31 FF 5F             LD      SP,#5FFF
+ 10   6004
+ 11   6004                      ; Clear screen
+ 12   6004 21 00 40             LD      HL,#4000
+ 13   6007 11 01 40             LD      DE,#4001
+ 14   600A 01 FF 1A             LD      BC,#1AFF
+ 15   600D 36 00                LD      (HL),0
+ 16   600F ED B0                LDIR
+ 17   6011
+ 18   6011                      ; Print header
+ 19   6011 21 11 61             LD      HL,msg_header
+ 20   6014 CD 9C 60             CALL    print_string
+ 21   6017
+ 22   6017                      ; Initialize database
+ 23   6017 CD 00 80             CALL    #8000          ; Call main/init_db
+ 24   601A
+ 25   601A                      ; Add test vectors across multiple pages
+ 26   601A 06 64                LD      B,100          ; Add 100 vectors (will span 2 pages)
+ 27   601C 21 D1 60             LD      HL,test_vec1
+ 28   601F              .add_loop:
+ 29   601F C5                   PUSH    BC
+ 30   6020 E5                   PUSH    HL
+ 31   6021
+ 32   6021                      ; Modify vector slightly for variety
+ 33   6021 78                   LD      A,B
+ 34   6022 77                   LD      (HL),A         ; First byte = loop counter
+ 35   6023
+ 36   6023 CD 95 8E             CALL    add_vector
+ 37   6026
+ 38   6026 E1                   POP     HL
+ 39   6027 C1                   POP     BC
+ 40   6028 10 F5                DJNZ    .add_loop
+ 41   602A
+ 42   602A                      ; Print status
+ 43   602A 21 2E 61             LD      HL,msg_added
+ 44   602D CD 9C 60             CALL    print_string
+ 45   6030 2A 40 8C             LD      HL,(vector_count)
+ 46   6033 CD A3 60             CALL    print_dec_hl
+ 47   6036 21 35 61             LD      HL,msg_vectors
+ 48   6039 CD 9C 60             CALL    print_string
+ 49   603C
+ 50   603C                      ; Reindex database
+ 51   603C CD 6C 8F             CALL    reindex
+ 52   603F
+ 53   603F 21 3F 61             LD      HL,msg_indexed
+ 54   6042 CD 9C 60             CALL    print_string
+ 55   6045
+ 56   6045                      ; Search for nearest to query
+ 57   6045 21 F1 60             LD      HL,query_vec
+ 58   6048 CD E6 8E             CALL    bf_search      ; Returns DE=index, BC=score
+ 59   604B
+ 60   604B                      ; Print result
+ 61   604B C5                   PUSH    BC
+ 62   604C D5                   PUSH    DE
+ 63   604D 21 53 61             LD      HL,msg_found
+ 64   6050 CD 9C 60             CALL    print_string
+ 65   6053
+ 66   6053                      ; Print index
+ 67   6053 E1                   POP     HL             ; Get index
+ 68   6054 E5                   PUSH    HL
+ 69   6055 CD A3 60             CALL    print_dec_hl
+ 70   6058
+ 71   6058                      ; Print score
+ 72   6058 21 65 61             LD      HL,msg_score
+ 73   605B CD 9C 60             CALL    print_string
+ 74   605E D1                   POP     DE
+ 75   605F C1                   POP     BC
+ 76   6060 60                   LD      H,B
+ 77   6061 69                   LD      L,C
+ 78   6062 CD A3 60             CALL    print_dec_hl
+ 79   6065
+ 80   6065                      ; Test hash search
+ 81   6065 21 6E 61             LD      HL,msg_hash_test
+ 82   6068 CD 9C 60             CALL    print_string
+ 83   606B
+ 84   606B 21 F1 60             LD      HL,query_vec
+ 85   606E CD B8 8F             CALL    hash_search
+ 86   6071
+ 87   6071                      ; Check if found
+ 88   6071 7A                   LD      A,D
+ 89   6072 A3                   AND     E
+ 90   6073 3C                   INC     A
+ 91   6074 28 17                JR      Z,.no_hash_match
+ 92   6076
+ 93   6076                      ; Print hash result
+ 94   6076 C5                   PUSH    BC
+ 95   6077 21 87 61             LD      HL,msg_hash_found
+ 96   607A CD 9C 60             CALL    print_string
+ 97   607D EB                   EX      DE,HL
+ 98   607E CD A3 60             CALL    print_dec_hl
+ 99   6081 21 65 61             LD      HL,msg_score
+100   6084 CD 9C 60             CALL    print_string
+101   6087 E1                   POP     HL
+102   6088 CD A3 60             CALL    print_dec_hl
+103   608B 18 06                JR      .done
+104   608D
+105   608D              .no_hash_match:
+106   608D 21 95 61             LD      HL,msg_no_hash
+107   6090 CD 9C 60             CALL    print_string
+108   6093
+109   6093              .done:
+110   6093                      ; Done
+111   6093 21 AA 61             LD      HL,msg_done
+112   6096 CD 9C 60             CALL    print_string
+113   6099
+114   6099              halt_loop:
+115   6099 76                   HALT
+116   609A 18 FD                JR      halt_loop
+117   609C
+118   609C              ; Print null-terminated string at HL
+119   609C              print_string:
+120   609C 7E                   LD      A,(HL)
+121   609D B7                   OR      A
+122   609E C8                   RET     Z
+123   609F D7                   RST     #10
+124   60A0 23                   INC     HL
+125   60A1 18 F9                JR      print_string
+126   60A3
+127   60A3              ; Print HL as decimal
+128   60A3              print_dec_hl:
+129   60A3 E5                   PUSH    HL
+130   60A4 D5                   PUSH    DE
+131   60A5 C5                   PUSH    BC
+132   60A6
+133   60A6 11 10 27             LD      DE,10000
+134   60A9 CD C6 60             CALL    .print_digit
+135   60AC 11 E8 03             LD      DE,1000
+136   60AF CD C6 60             CALL    .print_digit
+137   60B2 11 64 00             LD      DE,100
+138   60B5 CD C6 60             CALL    .print_digit
+139   60B8 11 0A 00             LD      DE,10
+140   60BB CD C6 60             CALL    .print_digit
+141   60BE 7D                   LD      A,L
+142   60BF C6 30                ADD     A,'0'
+143   60C1 D7                   RST     #10
+144   60C2
+145   60C2 C1                   POP     BC
+146   60C3 D1                   POP     DE
+147   60C4 E1                   POP     HL
+148   60C5 C9                   RET
+149   60C6
+150   60C6              .print_digit:
+151   60C6 3E 2F                LD      A,'0'-1
+152   60C8              .digit_loop:
+153   60C8 3C                   INC     A
+154   60C9 B7                   OR      A
+155   60CA ED 52                SBC     HL,DE
+156   60CC 30 FA                JR      NC,.digit_loop
+157   60CE 19                   ADD     HL,DE
+158   60CF D7                   RST     #10
+159   60D0 C9                   RET
+160   60D1
+161   60D1              ; Test vectors (32 bytes each, bit patterns)
+162   60D1              test_vec1:
+163   60D1 FF FF FF FF          DEFB    #FF,#FF,#FF,#FF,#FF,#FF,#FF,#FF
+163   60D5 FF FF FF FF
+164   60D9 00 00 00 00          DEFB    #00,#00,#00,#00,#00,#00,#00,#00
+164   60DD 00 00 00 00
+165   60E1 FF FF FF FF          DEFB    #FF,#FF,#FF,#FF,#FF,#FF,#FF,#FF
+165   60E5 FF FF FF FF
+166   60E9 00 00 00 00          DEFB    #00,#00,#00,#00,#00,#00,#00,#00
+166   60ED 00 00 00 00
+167   60F1
+168   60F1              ; Query vector (similar to test_vec1 with counter=50)
+169   60F1              query_vec:
+170   60F1 32 FF FF FF          DEFB    50,#FF,#FF,#FF,#FF,#FF,#FF,#FF
+170   60F5 FF FF FF FF
+171   60F9 00 00 00 00          DEFB    #00,#00,#00,#00,#00,#00,#00,#00
+171   60FD 00 00 00 00
+172   6101 FF FF FF FF          DEFB    #FF,#FF,#FF,#FF,#FF,#FF,#FF,#FF
+172   6105 FF FF FF FF
+173   6109 00 00 00 00          DEFB    #00,#00,#00,#00,#00,#00,#00,#00
+173   610D 00 00 00 00
+174   6111
+175   6111              ; Messages
+176   6111 5A 56 44 42  msg_header:     DEFB    "ZVDB-Z80 Paged Memory Test",13,13,0
+176   6115 2D 5A 38 30
+176   6119 20 50 61 67
+176   611D 65 64 20 4D
+176   6121 65 6D 6F 72
+176   6125 79 20 54 65
+176   6129 73 74 0D 0D
+176   612D 00
+177   612E 41 64 64 65  msg_added:      DEFB    "Added ",0
+177   6132 64 20 00
+178   6135 20 76 65 63  msg_vectors:    DEFB    " vectors",13,0
+178   6139 74 6F 72 73
+178   613D 0D 00
+179   613F 44 61 74 61  msg_indexed:    DEFB    "Database reindexed",13,0
+179   6143 62 61 73 65
+179   6147 20 72 65 69
+179   614B 6E 64 65 78
+179   614F 65 64 0D 00
+180   6153 4E 65 61 72  msg_found:      DEFB    "Nearest vector: #",0
+180   6157 65 73 74 20
+180   615B 76 65 63 74
+180   615F 6F 72 3A 20
+180   6163 23 00
+181   6165 20 53 63 6F  msg_score:      DEFB    " Score: ",0
+181   6169 72 65 3A 20
+181   616D 00
+182   616E 0D 54 65 73  msg_hash_test:  DEFB    13,"Testing hash search...",13,0
+182   6172 74 69 6E 67
+182   6176 20 68 61 73
+182   617A 68 20 73 65
+182   617E 61 72 63 68
+182   6182 2E 2E 2E 0D
+182   6186 00
+183   6187 48 61 73 68  msg_hash_found: DEFB    "Hash match: #",0
+183   618B 20 6D 61 74
+183   618F 63 68 3A 20
+183   6193 23 00
+184   6195 4E 6F 20 68  msg_no_hash:    DEFB    "No hash match found",13,0
+184   6199 61 73 68 20
+184   619D 6D 61 74 63
+184   61A1 68 20 66 6F
+184   61A5 75 6E 64 0D
+184   61A9 00
+185   61AA 0D 54 65 73  msg_done:       DEFB    13,"Test complete",13,0
+185   61AE 74 20 63 6F
+185   61B2 6D 70 6C 65
+185   61B6 74 65 0D 00
+186   61BA
+187   61BA              ; Include main zvdb code
+188   61BA                      INCLUDE "zvdb_paged.asm"
+# file opened: zvdb_paged.asm
+  1+  61BA              ; zvdb-z80 - Z80 implementation with paged memory support
+  2+  61BA              ; For Scorpion ZS-256-Turbo+ with 256KB RAM
+  3+  61BA              ; Uses 1-bit quantization and random hyperplane indexing
+  4+  61BA
+  5+  61BA                      DEVICE ZXSPECTRUM128
+  6+  61BA
+  7+  61BA              ; Constants
+  8+  61BA              VECTOR_BITS     EQU     256     ; Bits per vector
+  9+  61BA              VECTOR_BYTES    EQU     32      ; Bytes per vector (256/8)
+ 10+  61BA              VECTOR_ALIGN    EQU     256     ; Vectors aligned to 256-byte boundaries
+ 11+  61BA              VECTORS_PER_PAGE EQU    64      ; Vectors per 16KB page (16384/256)
+ 12+  61BA              MAX_PAGES       EQU     14      ; Maximum pages for vectors (pages 0-13)
+ 13+  61BA              MAX_VECTORS     EQU     896     ; Maximum vectors (14 pages × 64 vectors)
+ 14+  61BA              HASH_BITS       EQU     8       ; Bits for hash (256 buckets)
+ 15+  61BA              HYPERPLANES     EQU     8       ; Number of hyperplanes for hashing
+ 16+  61BA
+ 17+  61BA              ; Scorpion memory paging ports
+ 18+  61BA              PORT_7FFD       EQU     #7FFD   ; Standard 128K port
+ 19+  61BA              PORT_1FFD       EQU     #1FFD   ; Scorpion extended memory port
+ 20+  61BA
+ 21+  61BA              ; Memory pages
+ 22+  61BA              PAGE_VECTORS    EQU     #C000   ; Window for vector access (page 3)
+ 23+  61BA              PAGE_WORK       EQU     #8000   ; Working page (page 2)
+ 24+  61BA
+ 25+  61BA              ; Memory layout in page 2 (#8000-#BFFF)
+ 26+  61BA                      ORG     #8000
+ 27+  8000
+ 28+  8000              ; Hash index (256 entries × 4 bytes each)
+ 29+  8000              ; Format: [page:1][index:1][count:1][next:1]
+ 30+  8000              hash_index:
+ 31+  8000 00 00 00...          DEFS    256 * 4         ; 1KB
+ 32+  8400
+ 33+  8400              ; Hyperplanes for hashing (8 hyperplanes × 32 bytes each)
+ 34+  8400              hyperplanes:
+ 35+  8400 00 00 00...          DEFS    HYPERPLANES * VECTOR_BYTES      ; 256 bytes
+ 36+  8500
+ 37+  8500              ; Working buffers
+ 38+  8500              query_vector:
+ 39+  8500 00 00 00...          DEFS    VECTOR_BYTES    ; Query vector buffer
+ 40+  8520              temp_vector:
+ 41+  8520 00 00 00...          DEFS    VECTOR_BYTES    ; Temporary vector buffer
+ 42+  8540
+ 43+  8540              ; Vector index table (stores page and offset for each vector)
+ 44+  8540              ; Format: [page:1][offset:1]
+ 45+  8540              vector_index:
+ 46+  8540 00 00 00...          DEFS    MAX_VECTORS * 2 ; 1792 bytes
+ 47+  8C40
+ 48+  8C40              ; Variables
+ 49+  8C40 00 00        vector_count:   DEFW    0       ; Current number of vectors (16-bit for >256)
+ 50+  8C42 00 00        best_score:     DEFW    0       ; Best score found
+ 51+  8C44 00 00        best_index:     DEFW    0       ; Index of best match
+ 52+  8C46 FF           current_page:   DEFB    #FF     ; Currently mapped page at #C000
+ 53+  8C47
+ 54+  8C47              ; Bit counting lookup table (0-255 -> count of 1 bits)
+ 55+  8C47 00 00 00...          ALIGN   256
+ 56+  8D00              popcount_table:
+ 57+  8D00 00 01 01 02          DEFB    0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4
+ 57+  8D04 01 02 02 03
+ 57+  8D08 01 02 02 03
+ 57+  8D0C 02 03 03 04
+ 58+  8D10 01 02 02 03          DEFB    1,2,2,3,2,3,3,4,2,3,3,4,3,4,4,5
+ 58+  8D14 02 03 03 04
+ 58+  8D18 02 03 03 04
+ 58+  8D1C 03 04 04 05
+ 59+  8D20 01 02 02 03          DEFB    1,2,2,3,2,3,3,4,2,3,3,4,3,4,4,5
+ 59+  8D24 02 03 03 04
+ 59+  8D28 02 03 03 04
+ 59+  8D2C 03 04 04 05
+ 60+  8D30 02 03 03 04          DEFB    2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6
+ 60+  8D34 03 04 04 05
+ 60+  8D38 03 04 04 05
+ 60+  8D3C 04 05 05 06
+ 61+  8D40 01 02 02 03          DEFB    1,2,2,3,2,3,3,4,2,3,3,4,3,4,4,5
+ 61+  8D44 02 03 03 04
+ 61+  8D48 02 03 03 04
+ 61+  8D4C 03 04 04 05
+ 62+  8D50 02 03 03 04          DEFB    2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6
+ 62+  8D54 03 04 04 05
+ 62+  8D58 03 04 04 05
+ 62+  8D5C 04 05 05 06
+ 63+  8D60 02 03 03 04          DEFB    2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6
+ 63+  8D64 03 04 04 05
+ 63+  8D68 03 04 04 05
+ 63+  8D6C 04 05 05 06
+ 64+  8D70 03 04 04 05          DEFB    3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7
+ 64+  8D74 04 05 05 06
+ 64+  8D78 04 05 05 06
+ 64+  8D7C 05 06 06 07
+ 65+  8D80 01 02 02 03          DEFB    1,2,2,3,2,3,3,4,2,3,3,4,3,4,4,5
+ 65+  8D84 02 03 03 04
+ 65+  8D88 02 03 03 04
+ 65+  8D8C 03 04 04 05
+ 66+  8D90 02 03 03 04          DEFB    2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6
+ 66+  8D94 03 04 04 05
+ 66+  8D98 03 04 04 05
+ 66+  8D9C 04 05 05 06
+ 67+  8DA0 02 03 03 04          DEFB    2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6
+ 67+  8DA4 03 04 04 05
+ 67+  8DA8 03 04 04 05
+ 67+  8DAC 04 05 05 06
+ 68+  8DB0 03 04 04 05          DEFB    3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7
+ 68+  8DB4 04 05 05 06
+ 68+  8DB8 04 05 05 06
+ 68+  8DBC 05 06 06 07
+ 69+  8DC0 02 03 03 04          DEFB    2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6
+ 69+  8DC4 03 04 04 05
+ 69+  8DC8 03 04 04 05
+ 69+  8DCC 04 05 05 06
+ 70+  8DD0 03 04 04 05          DEFB    3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7
+ 70+  8DD4 04 05 05 06
+ 70+  8DD8 04 05 05 06
+ 70+  8DDC 05 06 06 07
+ 71+  8DE0 03 04 04 05          DEFB    3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7
+ 71+  8DE4 04 05 05 06
+ 71+  8DE8 04 05 05 06
+ 71+  8DEC 05 06 06 07
+ 72+  8DF0 04 05 05 06          DEFB    4,5,5,6,5,6,6,7,5,6,6,7,6,7,7,8
+ 72+  8DF4 05 06 06 07
+ 72+  8DF8 05 06 06 07
+ 72+  8DFC 06 07 07 08
+ 73+  8E00
+ 74+  8E00              ; Main entry point
+ 75+  8E00              main:
+ 76+  8E00 F3                   DI                      ; Disable interrupts
+ 77+  8E01 31 FF 7F             LD      SP,#7FFF       ; Set stack
+ 78+  8E04 CD 08 8E             CALL    init_db        ; Initialize database
+ 79+  8E07 C9                   RET
+ 80+  8E08
+ 81+  8E08              ; Initialize database
+ 82+  8E08              init_db:
+ 83+  8E08                      ; Clear vector count
+ 84+  8E08 AF                   XOR     A
+ 85+  8E09 32 40 8C             LD      (vector_count),A
+ 86+  8E0C 32 41 8C             LD      (vector_count+1),A
+ 87+  8E0F
+ 88+  8E0F                      ; Clear hash index
+ 89+  8E0F 21 00 80             LD      HL,hash_index
+ 90+  8E12 11 01 80             LD      DE,hash_index+1
+ 91+  8E15 01 FF 03             LD      BC,256*4-1
+ 92+  8E18 36 00                LD      (HL),0
+ 93+  8E1A ED B0                LDIR
+ 94+  8E1C
+ 95+  8E1C                      ; Initialize random hyperplanes
+ 96+  8E1C 21 00 84             LD      HL,hyperplanes
+ 97+  8E1F 01 00 01             LD      BC,HYPERPLANES * VECTOR_BYTES
+ 98+  8E22              .init_hyper:
+ 99+  8E22 ED 5F                LD      A,R            ; Use R register for pseudo-random
+100+  8E24 A8                   XOR     B
+101+  8E25 77                   LD      (HL),A
+102+  8E26 23                   INC     HL
+103+  8E27 0B                   DEC     BC
+104+  8E28 78                   LD      A,B
+105+  8E29 B1                   OR      C
+106+  8E2A 20 F6                JR      NZ,.init_hyper
+107+  8E2C
+108+  8E2C                      ; Mark current page as invalid
+109+  8E2C 3E FF                LD      A,#FF
+110+  8E2E 32 46 8C             LD      (current_page),A
+111+  8E31
+112+  8E31 C9                   RET
+113+  8E32
+114+  8E32              ; Switch to page containing vector
+115+  8E32              ; HL = vector index (0-895)
+116+  8E32              ; Returns: HL = pointer to vector in PAGE_VECTORS window
+117+  8E32              ; Preserves: BC, DE
+118+  8E32              switch_vector_page:
+119+  8E32 F5                   PUSH    AF
+120+  8E33 D5                   PUSH    DE
+121+  8E34
+122+  8E34                      ; Calculate page number (index / 64)
+123+  8E34 7C                   LD      A,H
+124+  8E35 CB 3F                SRL     A              ; Divide by 256
+125+  8E37 CB 3F                SRL     A              ; Divide by 64 (total /= 64)
+126+  8E39 57                   LD      D,A            ; D = page number
+127+  8E3A
+128+  8E3A                      ; Check if already mapped
+129+  8E3A 3A 46 8C             LD      A,(current_page)
+130+  8E3D BA                   CP      D
+131+  8E3E 28 07                JR      Z,.same_page
+132+  8E40
+133+  8E40                      ; Map new page
+134+  8E40 7A                   LD      A,D
+135+  8E41 CD 54 8E             CALL    set_page_c000
+136+  8E44 32 46 8C             LD      (current_page),A
+137+  8E47
+138+  8E47              .same_page:
+139+  8E47                      ; Calculate offset within page (index & 63) * 256
+140+  8E47 7D                   LD      A,L
+141+  8E48 E6 3F                AND     #3F            ; Modulo 64
+142+  8E4A 67                   LD      H,A
+143+  8E4B 2E 00                LD      L,0            ; HL = offset * 256
+144+  8E4D 11 00 C0             LD      DE,PAGE_VECTORS
+145+  8E50 19                   ADD     HL,DE          ; HL = final address
+146+  8E51
+147+  8E51 D1                   POP     DE
+148+  8E52 F1                   POP     AF
+149+  8E53 C9                   RET
+150+  8E54
+151+  8E54              ; Set page at #C000-#FFFF
+152+  8E54              ; A = page number (0-15)
+153+  8E54              set_page_c000:
+154+  8E54 C5                   PUSH    BC
+155+  8E55 4F                   LD      C,A
+156+  8E56 47                   LD      B,A
+157+  8E57
+158+  8E57                      ; Read current port values
+159+  8E57 3A 5C 5B             LD      A,(#5B5C)      ; System variable for last OUT to 7FFD
+160+  8E5A E6 F8                AND     #F8            ; Clear bits 0-2
+161+  8E5C B1                   OR      C              ; Set new page
+162+  8E5D 01 FD 7F             LD      BC,PORT_7FFD
+163+  8E60 ED 79                OUT     (C),A
+164+  8E62 32 5C 5B             LD      (#5B5C),A      ; Update system variable
+165+  8E65
+166+  8E65 C1                   POP     BC
+167+  8E66 C9                   RET
+168+  8E67
+169+  8E67              ; Count bits in a byte (A -> A)
+170+  8E67              count_bits:
+171+  8E67 E5                   PUSH    HL
+172+  8E68 26 8D                LD      H,popcount_table/256
+173+  8E6A 6F                   LD      L,A
+174+  8E6B 7E                   LD      A,(HL)
+175+  8E6C E1                   POP     HL
+176+  8E6D C9                   RET
+177+  8E6E
+178+  8E6E              ; Calculate 1-bit dot product between two vectors
+179+  8E6E              ; HL = vector1 pointer, DE = vector2 pointer
+180+  8E6E              ; Both vectors must be in accessible memory
+181+  8E6E              ; Returns: BC = similarity score (256 - 2*hamming_distance)
+182+  8E6E              dot_product_1bit:
+183+  8E6E E5                   PUSH    HL
+184+  8E6F D5                   PUSH    DE
+185+  8E70
+186+  8E70 01 00 00             LD      BC,0           ; Bit difference counter
+187+  8E73 C5                   PUSH    BC             ; Save counter on stack
+188+  8E74
+189+  8E74 06 20                LD      B,VECTOR_BYTES
+190+  8E76              .dot_loop:
+191+  8E76 1A                   LD      A,(DE)         ; Get byte from vector2
+192+  8E77 AE                   XOR     (HL)           ; XOR with vector1 byte
+193+  8E78 CD 67 8E             CALL    count_bits     ; Count different bits
+194+  8E7B
+195+  8E7B                      ; Add to total
+196+  8E7B 4F                   LD      C,A
+197+  8E7C 06 00                LD      B,0
+198+  8E7E E3                   EX      (SP),HL        ; Get counter from stack
+199+  8E7F 09                   ADD     HL,BC          ; Add bit count
+200+  8E80 E3                   EX      (SP),HL        ; Put counter back
+201+  8E81
+202+  8E81 23                   INC     HL
+203+  8E82 13                   INC     DE
+204+  8E83 10 F1                DJNZ    .dot_loop
+205+  8E85
+206+  8E85                      ; Calculate final score: 256 - 2*hamming_distance
+207+  8E85 C1                   POP     BC             ; Get hamming distance
+208+  8E86 CB 21                SLA     C              ; Multiply by 2
+209+  8E88 CB 10                RL      B
+210+  8E8A
+211+  8E8A 21 00 01             LD      HL,VECTOR_BITS
+212+  8E8D B7                   OR      A              ; Clear carry
+213+  8E8E ED 42                SBC     HL,BC          ; 256 - 2*hamming
+214+  8E90 44                   LD      B,H
+215+  8E91 4D                   LD      C,L
+216+  8E92
+217+  8E92 D1                   POP     DE
+218+  8E93 E1                   POP     HL
+219+  8E94 C9                   RET
+220+  8E95
+221+  8E95              ; Add vector to database
+222+  8E95              ; HL = pointer to vector data (in current memory)
+223+  8E95              add_vector:
+224+  8E95 E5                   PUSH    HL
+225+  8E96
+226+  8E96                      ; Check if database is full
+227+  8E96 2A 40 8C             LD      HL,(vector_count)
+228+  8E99 11 80 03             LD      DE,MAX_VECTORS
+229+  8E9C B7                   OR      A
+230+  8E9D ED 52                SBC     HL,DE
+231+  8E9F 30 30                JR      NC,.db_full
+232+  8EA1
+233+  8EA1                      ; Get vector count and calculate page/offset
+234+  8EA1 2A 40 8C             LD      HL,(vector_count)
+235+  8EA4 E5                   PUSH    HL
+236+  8EA5
+237+  8EA5                      ; Switch to appropriate page
+238+  8EA5 CD 32 8E             CALL    switch_vector_page ; HL = destination in paged memory
+239+  8EA8
+240+  8EA8                      ; Copy vector
+241+  8EA8 EB                   EX      DE,HL          ; DE = destination
+242+  8EA9 E1                   POP     HL             ; Restore vector count
+243+  8EAA E1                   POP     HL             ; HL = source vector
+244+  8EAB E5                   PUSH    HL
+245+  8EAC D5                   PUSH    DE
+246+  8EAD 01 20 00             LD      BC,VECTOR_BYTES
+247+  8EB0 ED B0                LDIR
+248+  8EB2
+249+  8EB2                      ; Update vector index table
+250+  8EB2 2A 40 8C             LD      HL,(vector_count)
+251+  8EB5 29                   ADD     HL,HL          ; *2 for index table
+252+  8EB6 11 40 85             LD      DE,vector_index
+253+  8EB9 19                   ADD     HL,DE
+254+  8EBA
+255+  8EBA                      ; Store page number
+256+  8EBA 3A 41 8C             LD      A,(vector_count+1)
+257+  8EBD CB 3F                SRL     A
+258+  8EBF CB 3F                SRL     A              ; Page = high byte >> 2
+259+  8EC1 77                   LD      (HL),A
+260+  8EC2 23                   INC     HL
+261+  8EC3
+262+  8EC3                      ; Store offset within page
+263+  8EC3 3A 40 8C             LD      A,(vector_count)
+264+  8EC6 E6 3F                AND     #3F            ; Offset = low byte & 63
+265+  8EC8 77                   LD      (HL),A
+266+  8EC9
+267+  8EC9                      ; Increment vector count
+268+  8EC9 2A 40 8C             LD      HL,(vector_count)
+269+  8ECC 23                   INC     HL
+270+  8ECD 22 40 8C             LD      (vector_count),HL
+271+  8ED0
+272+  8ED0 D1                   POP     DE
+273+  8ED1              .db_full:
+274+  8ED1 E1                   POP     HL
+275+  8ED2 C9                   RET
+276+  8ED3
+277+  8ED3              ; Copy vector from paged memory to working buffer
+278+  8ED3              ; HL = vector index
+279+  8ED3              ; DE = destination buffer
+280+  8ED3              copy_vector_to_buffer:
+281+  8ED3 C5                   PUSH    BC
+282+  8ED4 D5                   PUSH    DE
+283+  8ED5 E5                   PUSH    HL
+284+  8ED6
+285+  8ED6 CD 32 8E             CALL    switch_vector_page ; HL = vector pointer
+286+  8ED9
+287+  8ED9                      ; Copy to buffer
+288+  8ED9 C1                   POP     BC             ; Get index back
+289+  8EDA D1                   POP     DE             ; Destination
+290+  8EDB D5                   PUSH    DE
+291+  8EDC C5                   PUSH    BC
+292+  8EDD 01 20 00             LD      BC,VECTOR_BYTES
+293+  8EE0 ED B0                LDIR
+294+  8EE2
+295+  8EE2 E1                   POP     HL
+296+  8EE3 D1                   POP     DE
+297+  8EE4 C1                   POP     BC
+298+  8EE5 C9                   RET
+299+  8EE6
+300+  8EE6              ; Brute force search for nearest vector
+301+  8EE6              ; HL = query vector pointer
+302+  8EE6              ; Returns: DE = best index, BC = best score
+303+  8EE6              bf_search:
+304+  8EE6 E5                   PUSH    HL
+305+  8EE7
+306+  8EE7                      ; Copy query to buffer
+307+  8EE7 11 00 85             LD      DE,query_vector
+308+  8EEA 01 20 00             LD      BC,VECTOR_BYTES
+309+  8EED ED B0                LDIR
+310+  8EEF
+311+  8EEF                      ; Initialize best score to minimum
+312+  8EEF 21 00 80             LD      HL,#8000       ; -32768 (worst possible score)
+313+  8EF2 22 42 8C             LD      (best_score),HL
+314+  8EF5 21 00 00             LD      HL,0
+315+  8EF8 22 44 8C             LD      (best_index),HL
+316+  8EFB
+317+  8EFB                      ; Check each vector
+318+  8EFB 21 00 00             LD      HL,0           ; Vector index
+319+  8EFE              .search_loop:
+320+  8EFE E5                   PUSH    HL
+321+  8EFF
+322+  8EFF                      ; Check if we've searched all vectors
+323+  8EFF ED 5B 40 8C          LD      DE,(vector_count)
+324+  8F03 B7                   OR      A
+325+  8F04 ED 52                SBC     HL,DE
+326+  8F06 30 26                JR      NC,.search_done_pop
+327+  8F08
+328+  8F08                      ; Copy vector to temp buffer
+329+  8F08 E1                   POP     HL
+330+  8F09 E5                   PUSH    HL
+331+  8F0A 11 20 85             LD      DE,temp_vector
+332+  8F0D CD D3 8E             CALL    copy_vector_to_buffer
+333+  8F10
+334+  8F10                      ; Calculate dot product
+335+  8F10 21 00 85             LD      HL,query_vector
+336+  8F13 11 20 85             LD      DE,temp_vector
+337+  8F16 CD 6E 8E             CALL    dot_product_1bit ; BC = score
+338+  8F19
+339+  8F19                      ; Compare with best score
+340+  8F19 2A 42 8C             LD      HL,(best_score)
+341+  8F1C B7                   OR      A
+342+  8F1D ED 42                SBC     HL,BC
+343+  8F1F 30 09                JR      NC,.not_better
+344+  8F21
+345+  8F21                      ; New best score
+346+  8F21 ED 43 42 8C          LD      (best_score),BC
+347+  8F25 E1                   POP     HL
+348+  8F26 22 44 8C             LD      (best_index),HL
+349+  8F29 E5                   PUSH    HL
+350+  8F2A
+351+  8F2A              .not_better:
+352+  8F2A E1                   POP     HL
+353+  8F2B 23                   INC     HL
+354+  8F2C 18 D0                JR      .search_loop
+355+  8F2E
+356+  8F2E              .search_done_pop:
+357+  8F2E E1                   POP     HL
+358+  8F2F              .search_done:
+359+  8F2F E1                   POP     HL
+360+  8F30 ED 5B 44 8C          LD      DE,(best_index)
+361+  8F34 ED 4B 42 8C          LD      BC,(best_score)
+362+  8F38 C9                   RET
+363+  8F39
+364+  8F39              ; Calculate hash for a vector using hyperplanes
+365+  8F39              ; HL = vector pointer (must be in accessible memory)
+366+  8F39              ; Returns: A = 8-bit hash
+367+  8F39              calc_hash:
+368+  8F39 E5                   PUSH    HL
+369+  8F3A D5                   PUSH    DE
+370+  8F3B C5                   PUSH    BC
+371+  8F3C
+372+  8F3C 0E 00                LD      C,0            ; Hash accumulator
+373+  8F3E 11 00 84             LD      DE,hyperplanes
+374+  8F41
+375+  8F41                      ; Process each hyperplane
+376+  8F41 06 08                LD      B,HASH_BITS
+377+  8F43              .hash_loop:
+378+  8F43 C5                   PUSH    BC
+379+  8F44 E5                   PUSH    HL
+380+  8F45
+381+  8F45                      ; Calculate dot product with hyperplane
+382+  8F45 CD 6E 8E             CALL    dot_product_1bit
+383+  8F48
+384+  8F48                      ; Check if positive (BC >= 128)
+385+  8F48 78                   LD      A,B
+386+  8F49 B7                   OR      A
+387+  8F4A 20 0B                JR      NZ,.set_bit    ; High byte non-zero = positive
+388+  8F4C 79                   LD      A,C
+389+  8F4D FE 80                CP      128
+390+  8F4F 30 06                JR      NC,.set_bit
+391+  8F51
+392+  8F51                      ; Negative - rotate hash left with 0
+393+  8F51 E1                   POP     HL
+394+  8F52 C1                   POP     BC
+395+  8F53 CB 21                SLA     C              ; Shift left, 0 enters
+396+  8F55 18 05                JR      .next_plane
+397+  8F57
+398+  8F57              .set_bit:
+399+  8F57                      ; Positive - rotate hash left with 1
+400+  8F57 E1                   POP     HL
+401+  8F58 C1                   POP     BC
+402+  8F59 37                   SCF                    ; Set carry
+403+  8F5A CB 11                RL      C              ; Rotate left through carry
+404+  8F5C
+405+  8F5C              .next_plane:
+406+  8F5C C5                   PUSH    BC
+407+  8F5D E5                   PUSH    HL
+408+  8F5E
+409+  8F5E                      ; Move to next hyperplane
+410+  8F5E 21 20 00             LD      HL,VECTOR_BYTES
+411+  8F61 19                   ADD     HL,DE
+412+  8F62 EB                   EX      DE,HL
+413+  8F63
+414+  8F63 E1                   POP     HL
+415+  8F64 C1                   POP     BC
+416+  8F65 10 DC                DJNZ    .hash_loop
+417+  8F67
+418+  8F67 79                   LD      A,C            ; Return hash in A
+419+  8F68 C1                   POP     BC
+420+  8F69 D1                   POP     DE
+421+  8F6A E1                   POP     HL
+422+  8F6B C9                   RET
+423+  8F6C
+424+  8F6C              ; Reindex all vectors (rebuild hash index)
+425+  8F6C              reindex:
+426+  8F6C                      ; Clear hash index
+427+  8F6C 21 00 80             LD      HL,hash_index
+428+  8F6F 11 01 80             LD      DE,hash_index+1
+429+  8F72 01 FF 03             LD      BC,256*4-1
+430+  8F75 36 00                LD      (HL),0
+431+  8F77 ED B0                LDIR
+432+  8F79
+433+  8F79                      ; Process each vector
+434+  8F79 21 00 00             LD      HL,0           ; Vector counter
+435+  8F7C              .reindex_loop:
+436+  8F7C E5                   PUSH    HL
+437+  8F7D
+438+  8F7D                      ; Check if done
+439+  8F7D ED 5B 40 8C          LD      DE,(vector_count)
+440+  8F81 B7                   OR      A
+441+  8F82 ED 52                SBC     HL,DE
+442+  8F84 30 30                JR      NC,.reindex_done_pop
+443+  8F86
+444+  8F86                      ; Copy vector to temp buffer
+445+  8F86 E1                   POP     HL
+446+  8F87 E5                   PUSH    HL
+447+  8F88 11 20 85             LD      DE,temp_vector
+448+  8F8B CD D3 8E             CALL    copy_vector_to_buffer
+449+  8F8E
+450+  8F8E                      ; Calculate hash
+451+  8F8E 21 20 85             LD      HL,temp_vector
+452+  8F91 CD 39 8F             CALL    calc_hash      ; A = hash
+453+  8F94
+454+  8F94                      ; Get hash bucket address
+455+  8F94 6F                   LD      L,A
+456+  8F95 26 00                LD      H,0
+457+  8F97 29                   ADD     HL,HL          ; *2
+458+  8F98 29                   ADD     HL,HL          ; *4 for 4-byte entries
+459+  8F99 11 00 80             LD      DE,hash_index
+460+  8F9C 19                   ADD     HL,DE
+461+  8F9D
+462+  8F9D                      ; Check if bucket empty
+463+  8F9D 7E                   LD      A,(HL)
+464+  8F9E 23                   INC     HL
+465+  8F9F B6                   OR      (HL)
+466+  8FA0 2B                   DEC     HL
+467+  8FA1 20 0F                JR      NZ,.bucket_used
+468+  8FA3
+469+  8FA3                      ; Store in primary slot
+470+  8FA3 D1                   POP     DE             ; Vector index
+471+  8FA4 D5                   PUSH    DE
+472+  8FA5 7B                   LD      A,E
+473+  8FA6 77                   LD      (HL),A         ; Store index low
+474+  8FA7 23                   INC     HL
+475+  8FA8 7A                   LD      A,D
+476+  8FA9 77                   LD      (HL),A         ; Store index high
+477+  8FAA 23                   INC     HL
+478+  8FAB 36 01                LD      (HL),1         ; Count = 1
+479+  8FAD 23                   INC     HL
+480+  8FAE 36 FF                LD      (HL),#FF       ; No next entry
+481+  8FB0 18 00                JR      .next_vector
+482+  8FB2
+483+  8FB2              .bucket_used:
+484+  8FB2                      ; For now, skip collision handling
+485+  8FB2                      ; In full implementation, would chain entries
+486+  8FB2
+487+  8FB2              .next_vector:
+488+  8FB2 E1                   POP     HL
+489+  8FB3 23                   INC     HL
+490+  8FB4 18 C6                JR      .reindex_loop
+491+  8FB6
+492+  8FB6              .reindex_done_pop:
+493+  8FB6 E1                   POP     HL
+494+  8FB7 C9                   RET
+495+  8FB8
+496+  8FB8              ; Search using hash index
+497+  8FB8              ; HL = query vector pointer
+498+  8FB8              ; Returns: DE = best index, BC = best score
+499+  8FB8              hash_search:
+500+  8FB8 E5                   PUSH    HL
+501+  8FB9
+502+  8FB9                      ; Calculate hash of query
+503+  8FB9 CD 39 8F             CALL    calc_hash      ; A = hash
+504+  8FBC
+505+  8FBC                      ; Get hash bucket
+506+  8FBC 6F                   LD      L,A
+507+  8FBD 26 00                LD      H,0
+508+  8FBF 29                   ADD     HL,HL          ; *2
+509+  8FC0 29                   ADD     HL,HL          ; *4
+510+  8FC1 11 00 80             LD      DE,hash_index
+511+  8FC4 19                   ADD     HL,DE
+512+  8FC5
+513+  8FC5                      ; Check if bucket has entries
+514+  8FC5 5E                   LD      E,(HL)
+515+  8FC6 23                   INC     HL
+516+  8FC7 56                   LD      D,(HL)
+517+  8FC8 7B                   LD      A,E
+518+  8FC9 B2                   OR      D
+519+  8FCA 28 13                JR      Z,.no_match
+520+  8FCC
+521+  8FCC                      ; For now, just check first entry
+522+  8FCC                      ; Full implementation would check all chained entries
+523+  8FCC EB                   EX      DE,HL          ; HL = vector index
+524+  8FCD
+525+  8FCD                      ; Copy vector to buffer and compute score
+526+  8FCD 11 20 85             LD      DE,temp_vector
+527+  8FD0 CD D3 8E             CALL    copy_vector_to_buffer
+528+  8FD3
+529+  8FD3 E1                   POP     HL
+530+  8FD4 E5                   PUSH    HL
+531+  8FD5 D5                   PUSH    DE
+532+  8FD6 11 20 85             LD      DE,temp_vector
+533+  8FD9 CD 6E 8E             CALL    dot_product_1bit
+534+  8FDC
+535+  8FDC D1                   POP     DE
+536+  8FDD E1                   POP     HL
+537+  8FDE C9                   RET
+538+  8FDF
+539+  8FDF              .no_match:
+540+  8FDF E1                   POP     HL
+541+  8FE0 11 FF FF             LD      DE,#FFFF       ; No match
+542+  8FE3 01 00 00             LD      BC,0           ; Score = 0
+543+  8FE6 C9                   RET
+544+  8FE7
+545+  8FE7                      END     main
+# file closed: zvdb_paged.asm
+# file closed: test_paged.asm

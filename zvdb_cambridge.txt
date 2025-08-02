@@ -1,0 +1,146 @@
+ZVDB for MK14 (SC/MP INS8060)
+==============================
+
+Vector Database Implementation for Science of Cambridge MK14
+------------------------------------------------------------
+
+Concept:
+- Each vector = 1 byte (8 bits)
+- Maximum 16 vectors stored in RAM
+- Search = XOR and count set bits (Hamming distance)
+- Uses MK14's 256 bytes RAM + 512 bytes ROM monitor
+
+Memory Map:
+-----------
+0F00-0F7F: MK14 Monitor ROM
+0B00-0BFF: User RAM (256 bytes)
+0880-08FF: Display/keyboard I/O
+
+Program Layout:
+---------------
+
+RAM Usage:
+0B00: Query vector (input)
+0B01-0B10: Database vectors (up to 16)
+0B20: Vector count
+0B21: Current minimum distance
+0B22: Best match index
+0B23: Loop counter
+0B24: Temp storage
+
+SC/MP Assembly Program:
+-----------------------
+
+        ORG     0B30H           ; Start after data area
+
+; Initialize
+START:  LDI     0FFH            ; Max distance
+        ST      0B21H           ; Store as initial minimum
+        LDI     00H             
+        ST      0B22H           ; Clear best index
+        
+; Main search loop
+        LDI     01H             ; Start with vector 1
+        ST      0B23H           ; Store as counter
+
+LOOP:   LD      0B23H           ; Get current index
+        XPAL    P1              ; Use as pointer low byte
+        LDI     0BH             
+        XPAH    P1              ; P1 points to current vector
+        
+        LD      @1(P1)          ; Load vector[i]
+        ST      0B24H           ; Save temporarily
+        
+        LD      0B00H           ; Load query vector
+        XOR     0B24H           ; XOR with database vector
+        
+; Count set bits (Hamming distance)
+        ST      0B24H           ; Store XOR result
+        LDI     00H             ; Clear bit counter
+        XPAL    P2              ; Use P2 as bit counter
+        
+BITCNT: LD      0B24H           ; Get XOR result
+        ANI     01H             ; Check LSB
+        JZ      SKIP            ; Skip if 0
+        LD      @-1(P2)         ; Increment counter
+        XPAL    P2
+        
+SKIP:   LD      0B24H           ; Get XOR result
+        SR                      ; Shift right
+        ST      0B24H           ; Store back
+        JNZ     BITCNT          ; Continue if not zero
+        
+; Compare with minimum
+        XPAL    P2              ; Get bit count
+        ST      0B24H           ; Store distance
+        LD      0B21H           ; Load current minimum
+        CCL
+        CAD     0B24H           ; Compare (subtract)
+        JP      NEXT            ; Jump if new >= min
+        
+; Update minimum
+        LD      0B24H           ; Get new minimum
+        ST      0B21H           ; Store as minimum
+        LD      0B23H           ; Get current index
+        ST      0B22H           ; Store as best index
+        
+NEXT:   LD      0B23H           ; Get counter
+        CCL
+        DAI     01H             ; Increment
+        ST      0B23H           ; Store back
+        CCL
+        CAI     10H             ; Compare with 16
+        JNZ     LOOP            ; Continue if < 16
+
+; Display result
+        LD      0B22H           ; Load best match index
+        ANI     0FH             ; Mask to single digit
+        ORI     30H             ; Convert to ASCII
+        CAS                     ; Output to display
+        HALT                    ; Stop
+
+; Data entry routine (called from monitor)
+STORE:  XAE                     ; Get accumulator (vector value)
+        ST      @1(P1)          ; Store at pointer location
+        RTN                     ; Return to monitor
+
+Usage Instructions:
+-------------------
+
+1. Loading vectors:
+   - Use MK14 monitor to enter vector values at 0B01-0B10
+   - Each vector is an 8-bit value (00-FF hex)
+   - Example: To store AA at location 0B01:
+     Press: 0B01 AA [GO]
+
+2. Searching:
+   - Store query vector at 0B00
+   - Execute program from 0B30
+   - MK14 displays index (0-F) of closest match
+
+3. Example:
+   Database vectors:
+   0B01 = AA (10101010 binary)
+   0B02 = 55 (01010101 binary)  
+   0B03 = F0 (11110000 binary)
+   0B04 = 0F (00001111 binary)
+   
+   Query: A0 (10100000 binary)
+   Result: 1 (closest to vector at 0B01)
+
+Technical Notes:
+----------------
+- Uses SC/MP's XOR instruction for Hamming distance
+- Bit counting done by shift and test
+- Display output via CAS (Copy Accumulator to Serial)
+- Program fits in ~80 bytes of RAM
+- Can be extended to use cassette for vector storage
+
+MK14 Specific Features:
+-----------------------
+- Hex keypad input via monitor ROM routines
+- 8-digit 7-segment LED display
+- Optional RAM expansion for more vectors
+- Can interface with cassette for persistent storage
+
+Total: ~40 SC/MP instructions
