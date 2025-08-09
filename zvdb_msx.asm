@@ -1,5 +1,9 @@
 ; zvdb-z80 MSX-DOS version
-; Minimal Z80 implementation of ZVDB for CP/M and MSX2 systems
+; Minimal Z80 implementation of ZVDB for MSX systems
+;
+; It runs in any MSX2, MSX2+ or MSX turbo R machine or a MSX1 using any
+; 80 columns card installed (set the 80 columns mode first).
+;
 ; Uses 1-bit quantization and random hyperplane indexing
 
 ; CP/M system calls (MSX-DOS shares same system calls)
@@ -33,16 +37,20 @@ HASH_BITS       EQU     7       ; Bits for hash (128 buckets)
 HYPERPLANES     EQU     8       ; Number of hyperplanes for hashing
 
 ; MSX system calls
-CALSLT          EQU     #001C
-CLS             EQU     #00C3
-INITXT          EQU     #006C
-CHGET           EQU     #009F
-CHGCLR          EQU     #0062
-CHPUT           EQU     #00A2
+CALSLT          EQU     #001C   ; Call a routine in any slot
+CHGCLR          EQU     #0062   ; Change Colors
+CHGET           EQU     #009F   ; Character Get
+CHPUT           EQU     #00A2   ; Character Put
+CLS             EQU     #00C3   ; Clear Screen
+INITXT          EQU     #006C   ; Change to 40/80 column text mode
 
 ; MSX system variables
-LINL40          EQU     #F3AE
-EXPTBL          EQU     #FCC1
+LINL40          EQU     #F3AE   ; Screen width for SCREEN 0
+EXPTBL          EQU     #FCC1   ; Expanded slots table
+PUTPNT          EQU     #F3F8   ; Address to put a char in keyboard buffer
+GETPNT          EQU     #F3FA   ; Address to get a char in keyboard buffer
+CSRY            EQU     #F3DC   ; Cursor position Y
+CSRX            EQU     #F3DD   ; Cursor position X
 
         ORG     TPA
 
@@ -57,7 +65,11 @@ skip:
         CALL    init_db         ; Initialize database
         CALL    demo_ui         ; Run demo with UI
         
-        ; Exit to MSX-DOS
+        LD      B,0 + 1
+        LD      C,21 + 1
+        CALL    set_cursor_xy   ; Set cursor in the bottom of screen
+
+        ; Back to MSX-DOS
         LD      C,0
         JP      BDOS            ; Warm boot (safer)
 
@@ -71,10 +83,10 @@ check_80_columns:
         RET     Z
         
         LD      DE,.width_80_msg
-        CALL    print_str
+        JP      print_str
 
 .width_80_msg:
-        DEFM    "Change screen width to 80 columns!",13,10,0
+        DEFM    "Change to 80 columns first!",13,10,0
 
 ; Call ROM routines
 call_slot:
@@ -84,8 +96,7 @@ call_slot:
 ; Print character
 print_char:
         LD      IX,CHPUT
-        CALL    call_slot
-        RET        
+        JP      call_slot
 
 ; Print string
 print_str:
@@ -94,7 +105,46 @@ print_str:
         RET     Z
         CALL    print_char
         INC     DE
-        jr print_str
+        JR      print_str
+
+; Get a key without block console
+check_key:
+        LD      HL,(PUTPNT)
+        LD      DE,(GETPNT)
+        SBC     HL,DE
+        XOR     A
+        OR      H
+        OR      L
+        CP      0
+        RET     Z
+
+        LD      IX,CHGET
+        JP      call_slot
+
+; Clear screen
+clear_screen:
+        ; Just because use CLS routine doesn't not work :/
+        ; LD      IX,CLS
+        ; CALL    call_slot
+        LD      A,12
+        JP      print_char
+
+; Set cursor position
+set_cursor_xy:
+        PUSH    AF
+        PUSH    BC
+
+        INC     B
+        INC     C
+
+        LD      A,C
+        LD      (CSRY),A
+        LD      A,B
+        LD      (CSRX),A
+
+        POP     BC
+        POP     AF
+        RET
 
 ; Initialize database
 init_db:
@@ -163,25 +213,46 @@ demo_ui:
         
         XOR     A
         LD      (selected_vector),A
-        
-.ui_loop:
+
+        LD      A,#CC           ; "🮘"
+        LD      (vector_char),A
+
         CALL    display_vectors
+
+        XOR     A
+        LD      (current_display),A
+        LD      (selected_vector),A
+
+.ui_redraw
+        LD      A,#DB           ; "█"
+        LD      (vector_char),A
+
+        ; Highlight the current vector
+        CALL    .draw_vector
+
+        LD      A,#CC           ; "🮘"
+        LD      (vector_char),A
+
+.ui_loop:
         CALL    draw_plasma     ; Simple plasma effect
         CALL    update_scroller
-        
-        ; Check for key press
-        LD      C,C_KEY         ; Direct console I/O
-        LD      E,#FF           ; Input
-        CALL    BDOS
+
+        ; Check for a key pressed
+        call    check_key
         OR      A
-        JR      Z,.ui_loop   ; No key pressed
-        
+        JR      Z,.ui_loop      ; No key pressed
+
+        ; Disable highlight
+        PUSH    AF
+        CALL    .draw_vector
+        POP     AF
+
         ; Handle key
         CP      "q"
-        RET     Z               ; Quit
-        CP      "Q"
         RET     Z
-       
+        CP      "Q"
+        RET     Z               ; Quit
+
         CP      31              ; Down
         JR      Z,.move_down
 
@@ -190,29 +261,37 @@ demo_ui:
 
         CP      13              ; Enter
         JR      Z,.do_search
+
         CP      32              ; Space
         JR      Z,.do_search
         
         JR      .ui_loop
+
+.draw_vector:
+        LD      A,(selected_vector)
+        LD      (current_display),A
+        LD      B,A
+        JP      display_vector
 
 .move_down:
         LD      A,(selected_vector)
         INC     A
         LD      B,A
         LD      A,(vector_count)
+        DEC     A
         CP      B
-        JR      C,.ui_loop   ; Already at bottom
+        JR      C,.ui_redraw    ; Already at bottom
         LD      A,B
         LD      (selected_vector),A
-        JR      .ui_loop
+        JR      .ui_redraw
 
 .move_up:
         LD      A,(selected_vector)
         OR      A
-        JR      Z,.ui_loop   ; Already at top
+        JR      Z,.ui_redraw    ; Already at top
         DEC     A
         LD      (selected_vector),A
-        JR      .ui_loop
+        JR      .ui_redraw
 
 .do_search:
         CALL    perform_search
@@ -222,23 +301,21 @@ demo_ui:
         LD      C,C_READ
         CALL    BDOS
         
-        JR      .ui_loop
-
-; Clear screen (ANSI escape sequence)
-clear_screen:
-        LD      A,12
-        CALL    print_char
-        RET
+        JR      .ui_redraw
 
 ; Draw UI frame
 draw_ui_frame:
+        CALL    clear_screen
+
         LD      DE,ui_title
         CALL    print_str
         RET
 
 ui_title:
+        ; Frame glyphs are located in characters between 0 and 31 of ASCII
+        ; table, so to correctly print then I need to print the ASCII code
+        ; 1 and then send the glyph ASCII code plus 64.
         DEFM    27,"x5"             ; Disable cursor
-        DEFM    27,"E"              ; Clear Screen
 
         DEFM    1,"X"               ; "┌"
     .35 DEFM    1,"W"               ; "─"
@@ -252,21 +329,40 @@ ui_title:
     .35 DEFM    1,"W"               ; "─"
         DEFM    1,"[",13,10         ; "┘"
 
-        DEFM    "Use arrows keys to select, <Enter> to search and <Q> to quit",13,10,0
+        DEFM    "Use arrows keys to select, <Enter> to search or "
+        DEFM    "<Q> to quit",13,10,0
 
 ; Display vectors with 8x8 sprite representation
 display_vectors:
-        LD      DE,vector_list_pos
-        CALL    print_str
-        
         LD      A,(vector_count)
         LD      B,A
+
         XOR     A
         LD      (current_display),A
-        
+
 .display_loop:
         PUSH    BC
-        
+        CALL    display_vector
+        POP     BC
+
+        LD      A,(current_display)
+        INC     A
+        LD      (current_display),A
+
+        DJNZ    .display_loop
+        RET
+
+VECTOR_POS_Y:       EQU 5
+VECTOR_POS_X:       EQU 0
+
+display_vector:
+        ; Set cursor position
+        ADD     A,VECTOR_POS_Y + 1
+        LD      (CSRY),A
+
+        LD      A,VECTOR_POS_X + 1
+        LD      (CSRX),A
+
         ; Display vector number
         LD      A,(current_display)
         CALL    print_hex_byte
@@ -280,33 +376,18 @@ display_vectors:
         ; Display first 8 bytes as 8x8 sprite
         CALL    display_sprite
         
-        ; Clear highlight if needed
-        LD      A,(current_display)
-        LD      B,A
-        LD      A,(selected_vector)
-        CP      B
 
         ; New line
         LD      DE,crlf
         CALL    print_str
         
-        LD      A,(current_display)
-        INC     A
-        LD      (current_display),A
-        
-        POP     BC
-        DJNZ    .display_loop
-        
         RET
-
-vector_list_pos:
-        DEFM    27,"Y",32+5,32,0
-
-crlf:
-        DEFM    13,10,0
 
 ; Display 8x8 sprite from vector data
 display_sprite:
+        LD      A,(vector_char)
+        LD      C,A
+
         ; Get vector address
         LD      A,(current_display)
         LD      L,A
@@ -314,7 +395,9 @@ display_sprite:
     .5  ADD     HL,HL           ; x32
         LD      DE,vectors_db
         ADD     HL,DE
-        
+
+        LD      DE,print_buffer
+
         ; Display 8 bytes as 8x8 sprite
         LD      B,8
 .sprite_loop:
@@ -330,31 +413,32 @@ display_sprite:
         PUSH    AF
         
         JR      C,.set_bit
-        LD      A," "
+        LD      A," "           ; use a space
         JR      .show_bit
 .set_bit:
-        LD      A,(current_display)
-        LD      C,A
-        LD      A,(selected_vector)
-        CP      C
-        JR      NZ,.unselected_bit
-        LD      A,#DB           ; "█"
-        JR      .show_bit
-.unselected_bit:
-        LD      A,#CC           ; "🮘"
-
+        LD      A,C             ; use a glyph
 .show_bit:
-        CALL    print_char
+        CALL    .push_char
         POP     AF
         DJNZ    .bit_loop
-        
+
         LD      A," "
-        CALL    print_char
-        
+        CALL    .push_char
+
         POP     HL
         POP     BC
         DJNZ    .sprite_loop
+
+        XOR     A
+        CALL    .push_char
         
+        LD      DE,print_buffer
+        CALL    print_str
+
+        RET
+.push_char:
+        LD      (DE),A
+        INC     DE
         RET
 
 ; Simple plasma effect
@@ -367,8 +451,9 @@ draw_plasma:
 
 ; Update scrolling text
 update_scroller:
-        LD      DE,scroller_pos
-        CALL    print_str
+        LD      B,40
+        LD      C,22
+        CALL    set_cursor_xy
 
         LD      A,(scroll_text)
         LD      C,A
@@ -399,18 +484,15 @@ update_scroller:
         POP     BC
 
         INC     HL
-        DJNZ    .scroll_loop 
+        DJNZ    .scroll_loop
  
         RET
 
-scroller_pos:
-        DEFM    27,"Y",32+22,32+40,0  ; Bottom line
-
 scroll_text:
-        DEFM    "*** ZVDB-Z80 MSX EDITION *** GREETINGS TO ALL DEMOSCENERS!"
-        DEFM    " SPECIAL THANKS TO SIRIL/RD AND OISEE/4D FOR THE MUSIC... "
-        DEFM    " THIS IS A VECTOR DATABASE DEMO RUNNING ON YOUR MSX!"
-        DEFM    "                   "
+        DEFM    "*** ZVDB-Z80 MSX EDITION *** GREETINGS TO ALL "
+        DEFM    "DEMOSCENERS! SPECIAL THANKS TO SIRIL/RD AND OISEE/4D "
+        DEFM    "FOR THE MUSIC... THIS IS A VECTOR DATABASE DEMO RUNNING "
+        DEFM    "ON YOUR MSX!                   "
 scroll_text_end:
         
 
@@ -589,7 +671,9 @@ count_bits:
         RET
 
 ; Variables
+crlf:           DEFM    13,10,0
 vector_count:   DEFB    0
+vector_char:    DEFB    0
 selected_vector: DEFB   0
 current_display: DEFB   0
 current_index:  DEFB    0
@@ -597,6 +681,10 @@ best_score:     DEFW    0
 best_index:     DEFB    0
 plasma_phase:   DEFB    0
 scroll_ptr:     DEFW    scroll_text
+
+; To build strings before sent to screen
+print_buffer:
+            .80 DEFB    0
 
 ; Buffers and tables
 query_vector:   DEFS    VECTOR_BYTES

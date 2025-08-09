@@ -1,0 +1,1023 @@
+# file opened: zvdb_msx.asm
+  1   0000              ; zvdb-z80 MSX-DOS version
+  2   0000              ; Minimal Z80 implementation of ZVDB for MSX systems
+  3   0000              ;
+  4   0000              ; It runs in any MSX2, MSX2+ or MSX turbo R machine or a MSX1 using any
+  5   0000              ; 80 columns card installed (set the 80 columns mode first).
+  6   0000              ;
+  7   0000              ; Uses 1-bit quantization and random hyperplane indexing
+  8   0000
+  9   0000              ; CP/M system calls (MSX-DOS shares same system calls)
+ 10   0000              BDOS            EQU     5       ; BDOS entry point
+ 11   0000              BOOT            EQU     0       ; Warm boot
+ 12   0000              C_READ          EQU     1       ; Console input
+ 13   0000              C_WRITE         EQU     2       ; Console output
+ 14   0000              C_KEY           EQU     6       ; Get key
+ 15   0000              C_PRINT         EQU     9       ; Print string
+ 16   0000              C_READSTR       EQU     10      ; Buffered console input
+ 17   0000              F_OPEN          EQU     15      ; Open file
+ 18   0000              F_CLOSE         EQU     16      ; Close file
+ 19   0000              F_READ          EQU     20      ; Read sequential
+ 20   0000              F_WRITE         EQU     21      ; Write sequential
+ 21   0000              F_MAKE          EQU     22      ; Make file
+ 22   0000              F_DELETE        EQU     19      ; Delete file
+ 23   0000              DMA             EQU     26      ; Set DMA address
+ 24   0000
+ 25   0000              ; CP/M memory layout
+ 26   0000              TPA             EQU     #0100   ; Transient Program Area start
+ 27   0000              BDOS_ENTRY      EQU     #0005   ; BDOS entry point
+ 28   0000              FCB             EQU     #005C   ; Default FCB
+ 29   0000              FCB2            EQU     #006C   ; Second FCB
+ 30   0000              DMA_BUF         EQU     #0080   ; Default DMA buffer
+ 31   0000
+ 32   0000              ; Constants
+ 33   0000              VECTOR_BITS     EQU     256     ; Bits per vector
+ 34   0000              VECTOR_BYTES    EQU     32      ; Bytes per vector (256/8)
+ 35   0000              MAX_VECTORS     EQU     128     ; Maximum vectors (reduced for CP/M)
+ 36   0000              HASH_BITS       EQU     7       ; Bits for hash (128 buckets)
+ 37   0000              HYPERPLANES     EQU     8       ; Number of hyperplanes for hashing
+ 38   0000
+ 39   0000              ; MSX system calls
+ 40   0000              CALSLT          EQU     #001C   ; Call a routine in any slot
+ 41   0000              CHGCLR          EQU     #0062   ; Change Colors
+ 42   0000              CHGET           EQU     #009F   ; Character Get
+ 43   0000              CHPUT           EQU     #00A2   ; Character Put
+ 44   0000              CLS             EQU     #00C3   ; Clear Screen
+ 45   0000              INITXT          EQU     #006C   ; Change to 40/80 column text mode
+ 46   0000
+ 47   0000              ; MSX system variables
+ 48   0000              LINL40          EQU     #F3AE   ; Screen width for SCREEN 0
+ 49   0000              EXPTBL          EQU     #FCC1   ; Expanded slots table
+ 50   0000              PUTPNT          EQU     #F3F8   ; Address to put a char in keyboard buffer
+ 51   0000              GETPNT          EQU     #F3FA   ; Address to get a char in keyboard buffer
+ 52   0000              CSRY            EQU     #F3DC   ; Cursor position Y
+ 53   0000              CSRX            EQU     #F3DD   ; Cursor position X
+ 54   0000
+ 55   0000                      ORG     TPA
+ 56   0100
+ 57   0100              start:
+ 58   0100 CD 30 01             CALL    check_80_columns
+ 59   0103
+ 60   0103              skip:
+ 61   0103                      ; Print welcome message
+ 62   0103 11 1B 01             LD      DE,welcome_msg
+ 63   0106 CD 68 01             CALL    print_str
+ 64   0109
+ 65   0109 CD 9C 01             CALL    init_db         ; Initialize database
+ 66   010C CD E0 01             CALL    demo_ui         ; Run demo with UI
+ 67   010F
+ 68   010F 06 01                LD      B,0 + 1
+ 69   0111 0E 16                LD      C,21 + 1
+ 70   0113 CD 8D 01             CALL    set_cursor_xy   ; Set cursor in the bottom of screen
+ 71   0116
+ 72   0116                      ; Back to MSX-DOS
+ 73   0116 0E 00                LD      C,0
+ 74   0118 C3 05 00             JP      BDOS            ; Warm boot (safer)
+ 75   011B
+ 76   011B              welcome_msg:
+ 77   011B 5A 56 44 42          DEFM    "ZVDB-Z80 MSX Edition",0
+ 77   011F 2D 5A 38 30
+ 77   0123 20 4D 53 58
+ 77   0127 20 45 64 69
+ 77   012B 74 69 6F 6E
+ 77   012F 00
+ 78   0130
+ 79   0130              ; Check if MSX is 80 column text mode
+ 80   0130              check_80_columns:
+ 81   0130 3A AE F3             LD      A,(LINL40)
+ 82   0133 FE 50                CP      80
+ 83   0135 C8                   RET     Z
+ 84   0136
+ 85   0136 11 3C 01             LD      DE,.width_80_msg
+ 86   0139 C3 68 01             JP      print_str
+ 87   013C
+ 88   013C              .width_80_msg:
+ 89   013C 43 68 61 6E          DEFM    "Change to 80 columns first!",13,10,0
+ 89   0140 67 65 20 74
+ 89   0144 6F 20 38 30
+ 89   0148 20 63 6F 6C
+ 89   014C 75 6D 6E 73
+ 89   0150 20 66 69 72
+ 89   0154 73 74 21 0D
+ 89   0158 0A 00
+ 90   015A
+ 91   015A              ; Call ROM routines
+ 92   015A              call_slot:
+ 93   015A FD 2A C0 FC          LD      IY,(EXPTBL-1)   ; Where the ROM lives :)
+ 94   015E C3 1C 00             JP      CALSLT
+ 95   0161
+ 96   0161              ; Print character
+ 97   0161              print_char:
+ 98   0161 DD 21 A2 00          LD      IX,CHPUT
+ 99   0165 C3 5A 01             JP      call_slot
+100   0168
+101   0168              ; Print string
+102   0168              print_str:
+103   0168 1A                   LD      A,(DE)
+104   0169 FE 00                CP      0
+105   016B C8                   RET     Z
+106   016C CD 61 01             CALL    print_char
+107   016F 13                   INC     DE
+108   0170 18 F6                JR      print_str
+109   0172
+110   0172              ; Get a key without block console
+111   0172              check_key:
+112   0172 2A F8 F3             LD      HL,(PUTPNT)
+113   0175 ED 5B FA F3          LD      DE,(GETPNT)
+114   0179 ED 52                SBC     HL,DE
+115   017B AF                   XOR     A
+116   017C B4                   OR      H
+117   017D B5                   OR      L
+118   017E FE 00                CP      0
+119   0180 C8                   RET     Z
+120   0181
+121   0181 DD 21 9F 00          LD      IX,CHGET
+122   0185 C3 5A 01             JP      call_slot
+123   0188
+124   0188              ; Clear screen
+125   0188              clear_screen:
+126   0188                      ; Just because use CLS routine doesn't not work :/
+127   0188                      ; LD      IX,CLS
+128   0188                      ; CALL    call_slot
+129   0188 3E 0C                LD      A,12
+130   018A C3 61 01             JP      print_char
+131   018D
+132   018D              ; Set cursor position
+133   018D              set_cursor_xy:
+134   018D F5                   PUSH    AF
+135   018E C5                   PUSH    BC
+136   018F
+137   018F 04                   INC     B
+138   0190 0C                   INC     C
+139   0191
+140   0191 79                   LD      A,C
+141   0192 32 DC F3             LD      (CSRY),A
+142   0195 78                   LD      A,B
+143   0196 32 DD F3             LD      (CSRX),A
+144   0199
+145   0199 C1                   POP     BC
+146   019A F1                   POP     AF
+147   019B C9                   RET
+148   019C
+149   019C              ; Initialize database
+150   019C              init_db:
+151   019C AF                   XOR     A
+152   019D 32 D7 05             LD      (vector_count),A
+153   01A0
+154   01A0                      ; Clear hash index
+155   01A0 21 72 16             LD      HL,hash_index
+156   01A3 11 73 16             LD      DE,hash_index+1
+157   01A6 01 FF 00             LD      BC,128*2-1      ; Reduced for CP/M
+158   01A9 36 00                LD      (HL),0
+159   01AB ED B0                LDIR
+160   01AD
+161   01AD                      ; Initialize random hyperplanes
+162   01AD 21 72 17             LD      HL,hyperplanes
+163   01B0 01 00 01             LD      BC,HYPERPLANES * VECTOR_BYTES
+164   01B3 3E 55                LD      A,#55
+165   01B5              .init_hyper:
+166   01B5 77                   LD      (HL),A
+167   01B6 23                   INC     HL
+168   01B7 0B                   DEC     BC
+169   01B8 78                   LD      A,B
+170   01B9 B1                   OR      C
+171   01BA 20 F9                JR      NZ,.init_hyper
+172   01BC
+173   01BC                      ; Load some test vectors
+174   01BC CD C0 01             CALL    load_test_vectors
+175   01BF
+176   01BF C9                   RET
+177   01C0
+178   01C0              ; Load test vectors with simple patterns
+179   01C0              load_test_vectors:
+180   01C0 06 10                LD      B,16            ; Load 16 test vectors
+181   01C2 21 72 06             LD      HL,vectors_db
+182   01C5              .load_loop:
+183   01C5 C5                   PUSH    BC
+184   01C6 E5                   PUSH    HL
+185   01C7
+186   01C7                      ; Create a simple pattern for each vector
+187   01C7 0E 20                LD      C,VECTOR_BYTES
+188   01C9              .pattern_loop:
+189   01C9 78                   LD      A,B
+190   01CA A9                   XOR     C
+191   01CB 77                   LD      (HL),A
+192   01CC 23                   INC     HL
+193   01CD 0D                   DEC     C
+194   01CE 20 F9                JR      NZ,.pattern_loop
+195   01D0
+196   01D0 E1                   POP     HL
+197   01D1 11 20 00             LD      DE,VECTOR_BYTES
+198   01D4 19                   ADD     HL,DE
+199   01D5
+200   01D5 3A D7 05             LD      A,(vector_count)
+201   01D8 3C                   INC     A
+202   01D9 32 D7 05             LD      (vector_count),A
+203   01DC
+204   01DC C1                   POP     BC
+205   01DD 10 E6                DJNZ    .load_loop
+206   01DF
+207   01DF C9                   RET
+208   01E0
+209   01E0              ; Demo UI with vector selection
+210   01E0              demo_ui:
+211   01E0 CD 88 01             CALL    clear_screen
+212   01E3 CD 64 02             CALL    draw_ui_frame
+213   01E6
+214   01E6 AF                   XOR     A
+215   01E7 32 D9 05             LD      (selected_vector),A
+216   01EA
+217   01EA 3E CC                LD      A,#CC           ; "🮘"
+218   01EC 32 D8 05             LD      (vector_char),A
+219   01EF
+220   01EF CD 70 03             CALL    display_vectors
+221   01F2
+222   01F2 AF                   XOR     A
+223   01F3 32 DA 05             LD      (current_display),A
+224   01F6 32 D9 05             LD      (selected_vector),A
+225   01F9
+226   01F9              .ui_redraw
+227   01F9 3E DB                LD      A,#DB           ; "█"
+228   01FB 32 D8 05             LD      (vector_char),A
+229   01FE
+230   01FE                      ; Highlight the current vector
+231   01FE CD 2F 02             CALL    .draw_vector
+232   0201
+233   0201 3E CC                LD      A,#CC           ; "🮘"
+234   0203 32 D8 05             LD      (vector_char),A
+235   0206
+236   0206              .ui_loop:
+237   0206 CD EF 03             CALL    draw_plasma     ; Simple plasma effect
+238   0209 CD F7 03             CALL    update_scroller
+239   020C
+240   020C                      ; Check for a key pressed
+241   020C CD 72 01             call    check_key
+242   020F B7                   OR      A
+243   0210 28 F4                JR      Z,.ui_loop      ; No key pressed
+244   0212
+245   0212                      ; Disable highlight
+246   0212 F5                   PUSH    AF
+247   0213 CD 2F 02             CALL    .draw_vector
+248   0216 F1                   POP     AF
+249   0217
+250   0217                      ; Handle key
+251   0217 FE 71                CP      "q"
+252   0219 C8                   RET     Z
+253   021A FE 51                CP      "Q"
+254   021C C8                   RET     Z               ; Quit
+255   021D
+256   021D FE 1F                CP      31              ; Down
+257   021F 28 18                JR      Z,.move_down
+258   0221
+259   0221 FE 1E                CP      30              ; Up
+260   0223 28 26                JR      Z,.move_up
+261   0225
+262   0225 FE 0D                CP      13              ; Enter
+263   0227 28 2E                JR      Z,.do_search
+264   0229
+265   0229 FE 20                CP      32              ; Space
+266   022B 28 2A                JR      Z,.do_search
+267   022D
+268   022D 18 D7                JR      .ui_loop
+269   022F
+270   022F              .draw_vector:
+271   022F 3A D9 05             LD      A,(selected_vector)
+272   0232 32 DA 05             LD      (current_display),A
+273   0235 47                   LD      B,A
+274   0236 C3 87 03             JP      display_vector
+275   0239
+276   0239              .move_down:
+277   0239 3A D9 05             LD      A,(selected_vector)
+278   023C 3C                   INC     A
+279   023D 47                   LD      B,A
+280   023E 3A D7 05             LD      A,(vector_count)
+281   0241 3D                   DEC     A
+282   0242 B8                   CP      B
+283   0243 38 B4                JR      C,.ui_redraw    ; Already at bottom
+284   0245 78                   LD      A,B
+285   0246 32 D9 05             LD      (selected_vector),A
+286   0249 18 AE                JR      .ui_redraw
+287   024B
+288   024B              .move_up:
+289   024B 3A D9 05             LD      A,(selected_vector)
+290   024E B7                   OR      A
+291   024F 28 A8                JR      Z,.ui_redraw    ; Already at top
+292   0251 3D                   DEC     A
+293   0252 32 D9 05             LD      (selected_vector),A
+294   0255 18 A2                JR      .ui_redraw
+295   0257
+296   0257              .do_search:
+297   0257 CD DD 04             CALL    perform_search
+298   025A CD F8 04             CALL    display_results
+299   025D
+300   025D                      ; Wait for key
+301   025D 0E 01                LD      C,C_READ
+302   025F CD 05 00             CALL    BDOS
+303   0262
+304   0262 18 95                JR      .ui_redraw
+305   0264
+306   0264              ; Draw UI frame
+307   0264              draw_ui_frame:
+308   0264 CD 88 01             CALL    clear_screen
+309   0267
+310   0267 11 6E 02             LD      DE,ui_title
+311   026A CD 68 01             CALL    print_str
+312   026D C9                   RET
+313   026E
+314   026E              ui_title:
+315   026E                      ; Frame glyphs are located in characters between 0 and 31 of ASCII
+316   026E                      ; table, so to correctly print then I need to print the ASCII code
+317   026E                      ; 1 and then send the glyph ASCII code plus 64.
+318   026E 1B 78 35             DEFM    27,"x5"             ; Disable cursor
+319   0271
+320   0271 01 58                DEFM    1,"X"               ; "┌"
+321   0273 01 57       > DEFM    1,"W"               ; "─"
+321   0275 01 57       > DEFM    1,"W"
+321   0277 01 57       > DEFM    1,"W"
+321   0279 01 57       > DEFM    1,"W"
+321   027B 01 57       > DEFM    1,"W"
+321   027D 01 57       > DEFM    1,"W"
+321   027F 01 57       > DEFM    1,"W"
+321   0281 01 57       > DEFM    1,"W"
+321   0283 01 57       > DEFM    1,"W"
+321   0285 01 57       > DEFM    1,"W"
+321   0287 01 57       > DEFM    1,"W"
+321   0289 01 57       > DEFM    1,"W"
+321   028B 01 57       > DEFM    1,"W"
+321   028D 01 57       > DEFM    1,"W"
+321   028F 01 57       > DEFM    1,"W"
+321   0291 01 57       > DEFM    1,"W"
+321   0293 01 57       > DEFM    1,"W"
+321   0295 01 57       > DEFM    1,"W"
+321   0297 01 57       > DEFM    1,"W"
+321   0299 01 57       > DEFM    1,"W"
+321   029B 01 57       > DEFM    1,"W"
+321   029D 01 57       > DEFM    1,"W"
+321   029F 01 57       > DEFM    1,"W"
+321   02A1 01 57       > DEFM    1,"W"
+321   02A3 01 57       > DEFM    1,"W"
+321   02A5 01 57       > DEFM    1,"W"
+321   02A7 01 57       > DEFM    1,"W"
+321   02A9 01 57       > DEFM    1,"W"
+321   02AB 01 57       > DEFM    1,"W"
+321   02AD 01 57       > DEFM    1,"W"
+321   02AF 01 57       > DEFM    1,"W"
+321   02B1 01 57       > DEFM    1,"W"
+321   02B3 01 57       > DEFM    1,"W"
+321   02B5 01 57       > DEFM    1,"W"
+321   02B7 01 57       > DEFM    1,"W"
+322   02B9 01 59 0D 0A          DEFM    1,"Y",13,10         ; "┐"
+323   02BD
+324   02BD 01 56                DEFM    1,"V"               ; "│"
+325   02BF 20 5A 56 44          DEFM    " ZVDB-Z80 Vector Database Demo MSX "
+325   02C3 42 2D 5A 38
+325   02C7 30 20 56 65
+325   02CB 63 74 6F 72
+325   02CF 20 44 61 74
+325   02D3 61 62 61 73
+325   02D7 65 20 44 65
+325   02DB 6D 6F 20 4D
+325   02DF 53 58 20
+326   02E2 01 56 0D 0A          DEFM    1,"V",13,10         ; "│"
+327   02E6
+328   02E6 01 5A                DEFM    1,"Z"               ; "└"
+329   02E8 01 57       > DEFM    1,"W"               ; "─"
+329   02EA 01 57       > DEFM    1,"W"
+329   02EC 01 57       > DEFM    1,"W"
+329   02EE 01 57       > DEFM    1,"W"
+329   02F0 01 57       > DEFM    1,"W"
+329   02F2 01 57       > DEFM    1,"W"
+329   02F4 01 57       > DEFM    1,"W"
+329   02F6 01 57       > DEFM    1,"W"
+329   02F8 01 57       > DEFM    1,"W"
+329   02FA 01 57       > DEFM    1,"W"
+329   02FC 01 57       > DEFM    1,"W"
+329   02FE 01 57       > DEFM    1,"W"
+329   0300 01 57       > DEFM    1,"W"
+329   0302 01 57       > DEFM    1,"W"
+329   0304 01 57       > DEFM    1,"W"
+329   0306 01 57       > DEFM    1,"W"
+329   0308 01 57       > DEFM    1,"W"
+329   030A 01 57       > DEFM    1,"W"
+329   030C 01 57       > DEFM    1,"W"
+329   030E 01 57       > DEFM    1,"W"
+329   0310 01 57       > DEFM    1,"W"
+329   0312 01 57       > DEFM    1,"W"
+329   0314 01 57       > DEFM    1,"W"
+329   0316 01 57       > DEFM    1,"W"
+329   0318 01 57       > DEFM    1,"W"
+329   031A 01 57       > DEFM    1,"W"
+329   031C 01 57       > DEFM    1,"W"
+329   031E 01 57       > DEFM    1,"W"
+329   0320 01 57       > DEFM    1,"W"
+329   0322 01 57       > DEFM    1,"W"
+329   0324 01 57       > DEFM    1,"W"
+329   0326 01 57       > DEFM    1,"W"
+329   0328 01 57       > DEFM    1,"W"
+329   032A 01 57       > DEFM    1,"W"
+329   032C 01 57       > DEFM    1,"W"
+330   032E 01 5B 0D 0A          DEFM    1,"[",13,10         ; "┘"
+331   0332
+332   0332 55 73 65 20          DEFM    "Use arrows keys to select, <Enter> to search or "
+332   0336 61 72 72 6F
+332   033A 77 73 20 6B
+332   033E 65 79 73 20
+332   0342 74 6F 20 73
+332   0346 65 6C 65 63
+332   034A 74 2C 20 3C
+332   034E 45 6E 74 65
+332   0352 72 3E 20 74
+332   0356 6F 20 73 65
+332   035A 61 72 63 68
+332   035E 20 6F 72 20
+333   0362 3C 51 3E 20          DEFM    "<Q> to quit",13,10,0
+333   0366 74 6F 20 71
+333   036A 75 69 74 0D
+333   036E 0A 00
+334   0370
+335   0370              ; Display vectors with 8x8 sprite representation
+336   0370              display_vectors:
+337   0370 3A D7 05             LD      A,(vector_count)
+338   0373 47                   LD      B,A
+339   0374
+340   0374 AF                   XOR     A
+341   0375 32 DA 05             LD      (current_display),A
+342   0378
+343   0378              .display_loop:
+344   0378 C5                   PUSH    BC
+345   0379 CD 87 03             CALL    display_vector
+346   037C C1                   POP     BC
+347   037D
+348   037D 3A DA 05             LD      A,(current_display)
+349   0380 3C                   INC     A
+350   0381 32 DA 05             LD      (current_display),A
+351   0384
+352   0384 10 F2                DJNZ    .display_loop
+353   0386 C9                   RET
+354   0387
+355   0387              VECTOR_POS_Y:       EQU 5
+356   0387              VECTOR_POS_X:       EQU 0
+357   0387
+358   0387              display_vector:
+359   0387                      ; Set cursor position
+360   0387 C6 06                ADD     A,VECTOR_POS_Y + 1
+361   0389 32 DC F3             LD      (CSRY),A
+362   038C
+363   038C 3E 01                LD      A,VECTOR_POS_X + 1
+364   038E 32 DD F3             LD      (CSRX),A
+365   0391
+366   0391                      ; Display vector number
+367   0391 3A DA 05             LD      A,(current_display)
+368   0394 CD 38 05             CALL    print_hex_byte
+369   0397
+370   0397 3E 3A                LD      A,":"
+371   0399 CD 61 01             CALL    print_char
+372   039C
+373   039C 3E 20                LD      A," "
+374   039E CD 61 01             CALL    print_char
+375   03A1
+376   03A1                      ; Display first 8 bytes as 8x8 sprite
+377   03A1 CD AB 03             CALL    display_sprite
+378   03A4
+379   03A4
+380   03A4                      ; New line
+381   03A4 11 D4 05             LD      DE,crlf
+382   03A7 CD 68 01             CALL    print_str
+383   03AA
+384   03AA C9                   RET
+385   03AB
+386   03AB              ; Display 8x8 sprite from vector data
+387   03AB              display_sprite:
+388   03AB 3A D8 05             LD      A,(vector_char)
+389   03AE 4F                   LD      C,A
+390   03AF
+391   03AF                      ; Get vector address
+392   03AF 3A DA 05             LD      A,(current_display)
+393   03B2 6F                   LD      L,A
+394   03B3 26 00                LD      H,0
+395   03B5 29          > ADD     HL,HL           ; x32
+395   03B6 29          > ADD     HL,HL
+395   03B7 29          > ADD     HL,HL
+395   03B8 29          > ADD     HL,HL
+395   03B9 29          > ADD     HL,HL
+396   03BA 11 72 06             LD      DE,vectors_db
+397   03BD 19                   ADD     HL,DE
+398   03BE
+399   03BE 11 E2 05             LD      DE,print_buffer
+400   03C1
+401   03C1                      ; Display 8 bytes as 8x8 sprite
+402   03C1 06 08                LD      B,8
+403   03C3              .sprite_loop:
+404   03C3 C5                   PUSH    BC
+405   03C4 7E                   LD      A,(HL)
+406   03C5 23                   INC     HL
+407   03C6 E5                   PUSH    HL
+408   03C7
+409   03C7                      ; Display 8 bits
+410   03C7 06 08                LD      B,8
+411   03C9              .bit_loop:
+412   03C9 17                   RLA
+413   03CA F5                   PUSH    AF
+414   03CB
+415   03CB 38 04                JR      C,.set_bit
+416   03CD 3E 20                LD      A," "           ; use a space
+417   03CF 18 01                JR      .show_bit
+418   03D1              .set_bit:
+419   03D1 79                   LD      A,C             ; use a glyph
+420   03D2              .show_bit:
+421   03D2 CD EC 03             CALL    .push_char
+422   03D5 F1                   POP     AF
+423   03D6 10 F1                DJNZ    .bit_loop
+424   03D8
+425   03D8 3E 20                LD      A," "
+426   03DA CD EC 03             CALL    .push_char
+427   03DD
+428   03DD E1                   POP     HL
+429   03DE C1                   POP     BC
+430   03DF 10 E2                DJNZ    .sprite_loop
+431   03E1
+432   03E1 AF                   XOR     A
+433   03E2 CD EC 03             CALL    .push_char
+434   03E5
+435   03E5 11 E2 05             LD      DE,print_buffer
+436   03E8 CD 68 01             CALL    print_str
+437   03EB
+438   03EB C9                   RET
+439   03EC              .push_char:
+440   03EC 12                   LD      (DE),A
+441   03ED 13                   INC     DE
+442   03EE C9                   RET
+443   03EF
+444   03EF              ; Simple plasma effect
+445   03EF              draw_plasma:
+446   03EF 3A DF 05             LD      A,(plasma_phase)
+447   03F2 3C                   INC     A
+448   03F3 32 DF 05             LD      (plasma_phase),A
+449   03F6                      ; Simplified - would implement full plasma
+450   03F6 C9                   RET
+451   03F7
+452   03F7              ; Update scrolling text
+453   03F7              update_scroller:
+454   03F7 06 28                LD      B,40
+455   03F9 0E 16                LD      C,22
+456   03FB CD 8D 01             CALL    set_cursor_xy
+457   03FE
+458   03FE 3A 23 04             LD      A,(scroll_text)
+459   0401 4F                   LD      C,A
+460   0402
+461   0402 21 24 04             LD      HL,scroll_text + 1
+462   0405 11 23 04             LD      DE,scroll_text
+463   0408 06 B9                LD      B,scroll_text_end - scroll_text - 1
+464   040A              .update_message:
+465   040A 7E                   LD      A,(HL)
+466   040B 12                   LD      (DE),A
+467   040C 23                   INC     HL
+468   040D 13                   INC     DE
+469   040E 10 FA                DJNZ    .update_message
+470   0410
+471   0410 79                   LD      A,C
+472   0411 12                   LD      (DE),A
+473   0412
+474   0412 21 23 04             LD      HL,scroll_text
+475   0415 06 28                LD      B,40
+476   0417              .scroll_loop:
+477   0417 C5                   PUSH BC
+478   0418 E5                   PUSH HL
+479   0419
+480   0419 7E                   LD      A,(HL)
+481   041A CD 61 01             CALL    print_char
+482   041D
+483   041D E1                   POP     HL
+484   041E C1                   POP     BC
+485   041F
+486   041F 23                   INC     HL
+487   0420 10 F5                DJNZ    .scroll_loop
+488   0422
+489   0422 C9                   RET
+490   0423
+491   0423              scroll_text:
+492   0423 2A 2A 2A 20          DEFM    "*** ZVDB-Z80 MSX EDITION *** GREETINGS TO ALL "
+492   0427 5A 56 44 42
+492   042B 2D 5A 38 30
+492   042F 20 4D 53 58
+492   0433 20 45 44 49
+492   0437 54 49 4F 4E
+492   043B 20 2A 2A 2A
+492   043F 20 47 52 45
+492   0443 45 54 49 4E
+492   0447 47 53 20 54
+492   044B 4F 20 41 4C
+492   044F 4C 20
+493   0451 44 45 4D 4F          DEFM    "DEMOSCENERS! SPECIAL THANKS TO SIRIL/RD AND OISEE/4D "
+493   0455 53 43 45 4E
+493   0459 45 52 53 21
+493   045D 20 53 50 45
+493   0461 43 49 41 4C
+493   0465 20 54 48 41
+493   0469 4E 4B 53 20
+493   046D 54 4F 20 53
+493   0471 49 52 49 4C
+493   0475 2F 52 44 20
+493   0479 41 4E 44 20
+493   047D 4F 49 53 45
+493   0481 45 2F 34 44
+493   0485 20
+494   0486 46 4F 52 20          DEFM    "FOR THE MUSIC... THIS IS A VECTOR DATABASE DEMO RUNNING "
+494   048A 54 48 45 20
+494   048E 4D 55 53 49
+494   0492 43 2E 2E 2E
+494   0496 20 54 48 49
+494   049A 53 20 49 53
+494   049E 20 41 20 56
+494   04A2 45 43 54 4F
+494   04A6 52 20 44 41
+494   04AA 54 41 42 41
+494   04AE 53 45 20 44
+494   04B2 45 4D 4F 20
+494   04B6 52 55 4E 4E
+494   04BA 49 4E 47 20
+495   04BE 4F 4E 20 59          DEFM    "ON YOUR MSX!                   "
+495   04C2 4F 55 52 20
+495   04C6 4D 53 58 21
+495   04CA 20 20 20 20
+495   04CE 20 20 20 20
+495   04D2 20 20 20 20
+495   04D6 20 20 20 20
+495   04DA 20 20 20
+496   04DD              scroll_text_end:
+497   04DD
+498   04DD
+499   04DD              ; Perform search
+500   04DD              perform_search:
+501   04DD                      ; Get selected vector as query
+502   04DD 3A D9 05             LD      A,(selected_vector)
+503   04E0 6F                   LD      L,A
+504   04E1 26 00                LD      H,0
+505   04E3 29          > ADD     HL,HL           ; x32
+505   04E4 29          > ADD     HL,HL
+505   04E5 29          > ADD     HL,HL
+505   04E6 29          > ADD     HL,HL
+505   04E7 29          > ADD     HL,HL
+506   04E8 11 72 06             LD      DE,vectors_db
+507   04EB 19                   ADD     HL,DE
+508   04EC 11 32 06             LD      DE,query_vector
+509   04EF 01 20 00             LD      BC,VECTOR_BYTES
+510   04F2 ED B0                LDIR
+511   04F4
+512   04F4                      ; Brute force search
+513   04F4 CD 60 05             CALL    bf_search
+514   04F7 C9                   RET
+515   04F8
+516   04F8              ; Display search results
+517   04F8              display_results:
+518   04F8 11 17 05             LD      DE,results_msg
+519   04FB CD 68 01             CALL    print_str
+520   04FE
+521   04FE 3A DE 05             LD      A,(best_index)
+522   0501 CD 38 05             CALL    print_hex_byte
+523   0504
+524   0504 11 2F 05             LD      DE,score_msg
+525   0507 CD 68 01             CALL    print_str
+526   050A
+527   050A 2A DC 05             LD      HL,(best_score)
+528   050D CD 57 05             CALL    print_hex_word
+529   0510
+530   0510 11 D4 05             LD      DE,crlf
+531   0513 CD 68 01             CALL    print_str
+532   0516 C9                   RET
+533   0517
+534   0517              results_msg:
+535   0517 1B 59 36 20          DEFM    27,"Y",32+22," Best match: Vector ",0
+535   051B 42 65 73 74
+535   051F 20 6D 61 74
+535   0523 63 68 3A 20
+535   0527 56 65 63 74
+535   052B 6F 72 20 00
+536   052F
+537   052F              score_msg:
+538   052F 20 53 63 6F          DEFM    " Score: ",0
+538   0533 72 65 3A 20
+538   0537 00
+539   0538
+540   0538              ; Print hex byte in A
+541   0538              print_hex_byte:
+542   0538 F5                   PUSH    AF
+543   0539 1F          > RRA
+543   053A 1F          > RRA
+543   053B 1F          > RRA
+543   053C 1F          > RRA
+544   053D E6 0F                AND     #0F
+545   053F CD 49 05             CALL    print_hex_digit
+546   0542 F1                   POP     AF
+547   0543 E6 0F                AND     #0F
+548   0545 CD 49 05             CALL    print_hex_digit
+549   0548 C9                   RET
+550   0549
+551   0549              print_hex_digit:
+552   0549 FE 0A                CP      10
+553   054B 38 04                JR      C,.digit
+554   054D C6 37                ADD     A,"A"-10
+555   054F 18 02                JR      .print
+556   0551              .digit:
+557   0551 C6 30                ADD     A,"0"
+558   0553              .print:
+559   0553 CD 61 01             call    print_char
+560   0556 C9                   RET
+561   0557
+562   0557              ; Print hex word in HL
+563   0557              print_hex_word:
+564   0557 7C                   LD      A,H
+565   0558 CD 38 05             CALL    print_hex_byte
+566   055B 7D                   LD      A,L
+567   055C CD 38 05             CALL    print_hex_byte
+568   055F C9                   RET
+569   0560
+570   0560              ; Include core ZVDB routines (adapted from zvdb.asm)
+571   0560
+572   0560              ; Brute force search
+573   0560              bf_search:
+574   0560 21 00 00             LD      HL,#0000
+575   0563 22 DC 05             LD      (best_score),HL
+576   0566 AF                   XOR     A
+577   0567 32 DE 05             LD      (best_index),A
+578   056A
+579   056A 3A D7 05             LD      A,(vector_count)
+580   056D B7                   OR      A
+581   056E C8                   RET     Z               ; No vectors
+582   056F
+583   056F 47                   LD      B,A
+584   0570 AF                   XOR     A
+585   0571 32 DB 05             LD      (current_index),A
+586   0574
+587   0574              .search_loop:
+588   0574 C5                   PUSH    BC
+589   0575
+590   0575                      ; Get vector address
+591   0575 3A DB 05             LD      A,(current_index)
+592   0578 6F                   LD      L,A
+593   0579 26 00                LD      H,0
+594   057B 29          > ADD     HL,HL           ; x32
+594   057C 29          > ADD     HL,HL
+594   057D 29          > ADD     HL,HL
+594   057E 29          > ADD     HL,HL
+594   057F 29          > ADD     HL,HL
+595   0580 11 72 06             LD      DE,vectors_db
+596   0583 19                   ADD     HL,DE
+597   0584
+598   0584                      ; Calculate similarity
+599   0584 11 32 06             LD      DE,query_vector
+600   0587 CD A8 05             CALL    dot_product_1bit
+601   058A
+602   058A                      ; Compare with best
+603   058A ED 5B DC 05          LD      DE,(best_score)
+604   058E B7                   OR      A               ; Clear carry
+605   058F ED 52                SBC     HL,DE
+606   0591 38 0A                JR      C,.not_better
+607   0593 19                   ADD     HL,DE           ; Restore score
+608   0594 22 DC 05             LD      (best_score),HL
+609   0597 3A DB 05             LD      A,(current_index)
+610   059A 32 DE 05             LD      (best_index),A
+611   059D
+612   059D              .not_better:
+613   059D 3A DB 05             LD      A,(current_index)
+614   05A0 3C                   INC     A
+615   05A1 32 DB 05             LD      (current_index),A
+616   05A4
+617   05A4 C1                   POP     BC
+618   05A5 10 CD                DJNZ    .search_loop
+619   05A7
+620   05A7 C9                   RET
+621   05A8
+622   05A8              ; Calculate dot product for 1-bit vectors
+623   05A8              ; HL = vector1, DE = vector2
+624   05A8              ; Returns: HL = similarity (256 - 2*hamming_distance)
+625   05A8              dot_product_1bit:
+626   05A8 C5                   PUSH    BC
+627   05A9 D5                   PUSH    DE
+628   05AA
+629   05AA 01 00 00             LD      BC,0            ; Hamming distance counter
+630   05AD 3E 20                LD      A,VECTOR_BYTES
+631   05AF
+632   05AF              .dot_loop:
+633   05AF F5                   PUSH    AF
+634   05B0 1A                   LD      A,(DE)
+635   05B1 AE                   XOR     (HL)            ; XOR gives different bits
+636   05B2
+637   05B2                      ; Count bits
+638   05B2 CD CD 05             CALL    count_bits
+639   05B5 81                   ADD     A,C
+640   05B6 4F                   LD      C,A
+641   05B7 30 01                JR      NC,.no_carry
+642   05B9 04                   INC     B
+643   05BA              .no_carry:
+644   05BA
+645   05BA 23                   INC     HL
+646   05BB 13                   INC     DE
+647   05BC F1                   POP     AF
+648   05BD 3D                   DEC     A
+649   05BE 20 EF                JR      NZ,.dot_loop
+650   05C0
+651   05C0                      ; Calculate 256 - 2*hamming
+652   05C0 60                   LD      H,B
+653   05C1 69                   LD      L,C
+654   05C2 29                   ADD     HL,HL           ; x2
+655   05C3 EB                   EX      DE,HL
+656   05C4 21 00 01             LD      HL,256
+657   05C7 B7                   OR      A
+658   05C8 ED 52                SBC     HL,DE
+659   05CA
+660   05CA D1                   POP     DE
+661   05CB C1                   POP     BC
+662   05CC C9                   RET
+663   05CD
+664   05CD              ; Count bits in A
+665   05CD              count_bits:
+666   05CD E5                   PUSH    HL
+667   05CE 26 19                LD      H,popcount_table/256
+668   05D0 6F                   LD      L,A
+669   05D1 7E                   LD      A,(HL)
+670   05D2 E1                   POP     HL
+671   05D3 C9                   RET
+672   05D4
+673   05D4              ; Variables
+674   05D4 0D 0A 00     crlf:           DEFM    13,10,0
+675   05D7 00           vector_count:   DEFB    0
+676   05D8 00           vector_char:    DEFB    0
+677   05D9 00           selected_vector: DEFB   0
+678   05DA 00           current_display: DEFB   0
+679   05DB 00           current_index:  DEFB    0
+680   05DC 00 00        best_score:     DEFW    0
+681   05DE 00           best_index:     DEFB    0
+682   05DF 00           plasma_phase:   DEFB    0
+683   05E0 23 04        scroll_ptr:     DEFW    scroll_text
+684   05E2
+685   05E2              ; To build strings before sent to screen
+686   05E2              print_buffer:
+687   05E2 00          > DEFB    0
+687   05E3 00          > DEFB    0
+687   05E4 00          > DEFB    0
+687   05E5 00          > DEFB    0
+687   05E6 00          > DEFB    0
+687   05E7 00          > DEFB    0
+687   05E8 00          > DEFB    0
+687   05E9 00          > DEFB    0
+687   05EA 00          > DEFB    0
+687   05EB 00          > DEFB    0
+687   05EC 00          > DEFB    0
+687   05ED 00          > DEFB    0
+687   05EE 00          > DEFB    0
+687   05EF 00          > DEFB    0
+687   05F0 00          > DEFB    0
+687   05F1 00          > DEFB    0
+687   05F2 00          > DEFB    0
+687   05F3 00          > DEFB    0
+687   05F4 00          > DEFB    0
+687   05F5 00          > DEFB    0
+687   05F6 00          > DEFB    0
+687   05F7 00          > DEFB    0
+687   05F8 00          > DEFB    0
+687   05F9 00          > DEFB    0
+687   05FA 00          > DEFB    0
+687   05FB 00          > DEFB    0
+687   05FC 00          > DEFB    0
+687   05FD 00          > DEFB    0
+687   05FE 00          > DEFB    0
+687   05FF 00          > DEFB    0
+687   0600 00          > DEFB    0
+687   0601 00          > DEFB    0
+687   0602 00          > DEFB    0
+687   0603 00          > DEFB    0
+687   0604 00          > DEFB    0
+687   0605 00          > DEFB    0
+687   0606 00          > DEFB    0
+687   0607 00          > DEFB    0
+687   0608 00          > DEFB    0
+687   0609 00          > DEFB    0
+687   060A 00          > DEFB    0
+687   060B 00          > DEFB    0
+687   060C 00          > DEFB    0
+687   060D 00          > DEFB    0
+687   060E 00          > DEFB    0
+687   060F 00          > DEFB    0
+687   0610 00          > DEFB    0
+687   0611 00          > DEFB    0
+687   0612 00          > DEFB    0
+687   0613 00          > DEFB    0
+687   0614 00          > DEFB    0
+687   0615 00          > DEFB    0
+687   0616 00          > DEFB    0
+687   0617 00          > DEFB    0
+687   0618 00          > DEFB    0
+687   0619 00          > DEFB    0
+687   061A 00          > DEFB    0
+687   061B 00          > DEFB    0
+687   061C 00          > DEFB    0
+687   061D 00          > DEFB    0
+687   061E 00          > DEFB    0
+687   061F 00          > DEFB    0
+687   0620 00          > DEFB    0
+687   0621 00          > DEFB    0
+687   0622 00          > DEFB    0
+687   0623 00          > DEFB    0
+687   0624 00          > DEFB    0
+687   0625 00          > DEFB    0
+687   0626 00          > DEFB    0
+687   0627 00          > DEFB    0
+687   0628 00          > DEFB    0
+687   0629 00          > DEFB    0
+687   062A 00          > DEFB    0
+687   062B 00          > DEFB    0
+687   062C 00          > DEFB    0
+687   062D 00          > DEFB    0
+687   062E 00          > DEFB    0
+687   062F 00          > DEFB    0
+687   0630 00          > DEFB    0
+687   0631 00          > DEFB    0
+688   0632
+689   0632              ; Buffers and tables
+690   0632 00 00 00...  query_vector:   DEFS    VECTOR_BYTES
+691   0652 00 00 00...  temp_vector:    DEFS    VECTOR_BYTES
+692   0672
+693   0672              ; Vector database (reduced size for CP/M)
+694   0672 00 00 00...  vectors_db:     DEFS    VECTOR_BYTES * MAX_VECTORS
+695   1672
+696   1672              ; Hash index
+697   1672 00 00 00...  hash_index:     DEFS    128 * 2
+698   1772
+699   1772              ; Hyperplanes
+700   1772 00 00 00...  hyperplanes:    DEFS    HYPERPLANES * VECTOR_BYTES
+701   1872
+702   1872              ; Popcount table
+703   1872 00 00 00...          ALIGN   256
+704   1900              popcount_table:
+705   1900 00 01 01 02          DEFB    0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4
+705   1904 01 02 02 03
+705   1908 01 02 02 03
+705   190C 02 03 03 04
+706   1910 01 02 02 03          DEFB    1,2,2,3,2,3,3,4,2,3,3,4,3,4,4,5
+706   1914 02 03 03 04
+706   1918 02 03 03 04
+706   191C 03 04 04 05
+707   1920 01 02 02 03          DEFB    1,2,2,3,2,3,3,4,2,3,3,4,3,4,4,5
+707   1924 02 03 03 04
+707   1928 02 03 03 04
+707   192C 03 04 04 05
+708   1930 02 03 03 04          DEFB    2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6
+708   1934 03 04 04 05
+708   1938 03 04 04 05
+708   193C 04 05 05 06
+709   1940 01 02 02 03          DEFB    1,2,2,3,2,3,3,4,2,3,3,4,3,4,4,5
+709   1944 02 03 03 04
+709   1948 02 03 03 04
+709   194C 03 04 04 05
+710   1950 02 03 03 04          DEFB    2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6
+710   1954 03 04 04 05
+710   1958 03 04 04 05
+710   195C 04 05 05 06
+711   1960 02 03 03 04          DEFB    2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6
+711   1964 03 04 04 05
+711   1968 03 04 04 05
+711   196C 04 05 05 06
+712   1970 03 04 04 05          DEFB    3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7
+712   1974 04 05 05 06
+712   1978 04 05 05 06
+712   197C 05 06 06 07
+713   1980 01 02 02 03          DEFB    1,2,2,3,2,3,3,4,2,3,3,4,3,4,4,5
+713   1984 02 03 03 04
+713   1988 02 03 03 04
+713   198C 03 04 04 05
+714   1990 02 03 03 04          DEFB    2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6
+714   1994 03 04 04 05
+714   1998 03 04 04 05
+714   199C 04 05 05 06
+715   19A0 02 03 03 04          DEFB    2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6
+715   19A4 03 04 04 05
+715   19A8 03 04 04 05
+715   19AC 04 05 05 06
+716   19B0 03 04 04 05          DEFB    3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7
+716   19B4 04 05 05 06
+716   19B8 04 05 05 06
+716   19BC 05 06 06 07
+717   19C0 02 03 03 04          DEFB    2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6
+717   19C4 03 04 04 05
+717   19C8 03 04 04 05
+717   19CC 04 05 05 06
+718   19D0 03 04 04 05          DEFB    3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7
+718   19D4 04 05 05 06
+718   19D8 04 05 05 06
+718   19DC 05 06 06 07
+719   19E0 03 04 04 05          DEFB    3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7
+719   19E4 04 05 05 06
+719   19E8 04 05 05 06
+719   19EC 05 06 06 07
+720   19F0 04 05 05 06          DEFB    4,5,5,6,5,6,6,7,5,6,6,7,6,7,7,8
+720   19F4 05 06 06 07
+720   19F8 05 06 06 07
+720   19FC 06 07 07 08
+721   1A00
+722   1A00              ; Stack space
+723   1A00 00 00 00...          DEFS    256
+724   1B00              stack_top:
+725   1B00
+726   1B00                      END     start
+# file closed: zvdb_msx.asm
