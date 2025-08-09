@@ -69,6 +69,7 @@ skip:
         LD      C,21 + 1
         CALL    set_cursor_xy   ; Set cursor in the bottom of screen
 
+back_to_dos:
         ; Back to MSX-DOS
         LD      C,0
         JP      BDOS            ; Warm boot (safer)
@@ -83,7 +84,8 @@ check_80_columns:
         RET     Z
         
         LD      DE,.width_80_msg
-        JP      print_str
+        CALL    print_str
+        JP      back_to_dos
 
 .width_80_msg:
         DEFM    "Change to 80 columns first!",13,10,0
@@ -214,7 +216,7 @@ demo_ui:
         XOR     A
         LD      (selected_vector),A
 
-        LD      A,#CC           ; "🮘"
+        LD      A,"#" ; #CC           ; "🮘"
         LD      (vector_char),A
 
         CALL    display_vectors
@@ -224,13 +226,13 @@ demo_ui:
         LD      (selected_vector),A
 
 .ui_redraw
-        LD      A,#DB           ; "█"
+        LD      A,#FF ; #DB           ; "█"
         LD      (vector_char),A
 
         ; Highlight the current vector
         CALL    .draw_vector
 
-        LD      A,#CC           ; "🮘"
+        LD      A,"#" ; #CC           ; "🮘"
         LD      (vector_char),A
 
 .ui_loop:
