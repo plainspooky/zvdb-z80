@@ -37,3 +37,6 @@ Thumbs.db
 RunCPM/
 # Keep the CP/M disk structure
 !A/
+
+# Avoiding to commit the disk image
+build/zvdb_msx.dsk

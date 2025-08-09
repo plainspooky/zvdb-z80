@@ -2,7 +2,7 @@
 
 Minimal Z80 assembly implementation of [ZVDB (ABAP Vector Database)](https://github.com/oisee/zvdb) for multiple platforms including ZX Spectrum, CP/M systems, and even programmable calculators!
 
-✨ **NEW**: CP/M version, UI demos, and world's smallest vector database (36 calculator steps!) - see [CHANGELOG.md](CHANGELOG.md)
+✨ **NEW**: MSX-DOS and CP/M version, UI demos, and world's smallest vector database (36 calculator steps!) - see [CHANGELOG.md](CHANGELOG.md)
 
 ## Quick Start
 
@@ -15,6 +15,10 @@ fuse build/zvdb_ui.sna
 
 # Run on CP/M system
 cpm build/zvdb_cpm.com
+
+# Run on MSX emulator (using openMSX)
+cp assets/msxdos.dsk build/zvdb_msx.dsk
+openmsx -machine msx2 -script assets/install.tcl
 ```
 
 ## 🔗 Related Implementations
@@ -52,6 +56,11 @@ cpm build/zvdb_cpm.com
 - ANSI terminal UI with vector visualization
 - Interactive selection and search
 - See [Issue #1](https://github.com/oisee/zvdb-z80/issues/1)
+
+### 💾 MSX-DOS Version (NEW!)
+- Works on MSX2, MSX2+ and MSX turbo R machines
+- Also works on MSX using 80 columns card
+- Same features of CP/M version
 
 ### 🧮 Sinclair Cambridge Programmable (NEW!)
 - World's smallest vector database - just 36 steps!
@@ -135,13 +144,16 @@ make
 ```
 
 This creates the following files in the `build/` directory:
-- `zvdb_test.sna` - Basic version test
+
+- - `zvdb_test.sna` - Basic version test
 - `zvdb_paged_test.sna` - Paged memory version test
 - `zvdb_compact_test.sna` - Compact version test
 - `zvdb_ui.sna` - Interactive UI demo (NEW!)
 - `zvdb_cpm.com` - CP/M executable (NEW!)
+- `zvdb_msx.com` - MSX-DOS executable (NEW!)
 
 **Note**: There are currently some duplicate label issues with the assembly files. Pre-built binaries are available in the `build/` directory:
+
 - `zvdb_test.tap` - TAP file for loading in ZX Spectrum emulators
 - `test_runner.bin` - Binary test runner
 - `zvdb_code.bin` - Core ZVDB implementation binary
@@ -253,6 +265,13 @@ See `zvdb_cambridge.txt` for the SC/MP assembly implementation.
 - **Controls**: W/S or J/K to navigate, Enter to search, Q to quit
 - **Compatibility**: Tested for Amstrad CPC and PCW systems
 - **Memory Efficient**: Fits within CP/M TPA constraints
+
+### 🖥️ MSX Terminal UI (`zvdb_msx.com`)
+- **Compatibility**: Works on any MSX machine with 80 columns text support
+- **ASCII Sprites**: Vectors shown as 8x8 ASCII art patterns
+- **Controls**: Use Up/Down keys to navigate, Space/Enter to search and Q to quit
+- **Compatibility**: Tested on MSX2 and MSX2+ machine (KANJI mode but isn't supported)
+- **Memory Efficient**: Fits within MSX-DOS TPA constraints
 
 ## License
 

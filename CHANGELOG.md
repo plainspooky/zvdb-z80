@@ -2,6 +2,16 @@
 
 All notable changes to ZVDB-Z80 will be documented in this file.
 
+## [Unreleased] - 2025-08-09
+
+### Added
+- **MSX** version (`zvdb_msx.asm`) for MSX machines running MSX-DOS
+  - Runs in any MSX2, MSX2+ ou MSX turbo R computers
+  - Also runs in MSX with 80 columns card installed
+  - Same features of CP/M version (sprites, scroller and box drawing chars) and memory constraints as well. 
+  - Interactive vector selection using arrow keys
+  - Builds to standard MSX-DOS executable (.COM)
+
 ## [Unreleased] - 2025-07-10
 
 ### Added
